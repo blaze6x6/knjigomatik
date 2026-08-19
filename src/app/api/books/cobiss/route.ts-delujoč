@@ -1,0 +1,31 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(request: NextRequest) {
+  const isbn = request.nextUrl.searchParams.get("isbn");
+  if (!isbn) return NextResponse.json({ error: "Manjka ISBN" }, { status: 400 });
+
+  try {
+    // COBISS-ov iskalni API (zanesljivejši)
+    // Iščemo po ISBN, da dobimo ID zapisa
+    const searchRes = await fetch(`https://plus.cobiss.net/cobiss/si/sl/bib/search?q=${isbn}&db=cobib&mat=allmaterials`);
+    const html = await searchRes.text();
+    
+    // Izvlečemo ID knjige iz HTML-ja (prva najdena knjiga)
+    const match = html.match(/\/cobiss\/si\/sl\/bib\/(\d+)/);
+    if (!match) return NextResponse.json({ error: "Knjiga v COBISS ni najdena" }, { status: 404 });
+    
+    const cobissId = match[1];
+    
+    // Sedaj potegnemo podatke iz COBISS repozitorija slik in meta podatkov
+    // To je direktni URL, ki ga Cloudflare ne blokira
+    return NextResponse.json({
+      title: "Knjiga najdena (dopolnite ročno)",
+      author: "Preverite v COBISS",
+      year: null,
+      thumbnail: `https://d.cobiss.net/repository/si/thumbnails/cobib/${cobissId}.jpg`,
+      description: `https://plus.cobiss.net/cobiss/si/sl/bib/${cobissId}`
+    });
+  } catch (error) {
+    return NextResponse.json({ error: "Napaka pri uvozu" }, { status: 500 });
+  }
+}

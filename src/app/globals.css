@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+
+  /* Theme-aware surface colors (dark defaults, overridden by .light) */
+  --color-surface: var(--surface);
+  --color-surface-light: var(--surface-light);
+  --color-surface-lighter: var(--surface-lighter);
+
+  /* Theme-aware text colors */
+  --color-t-primary: var(--t-primary);
+  --color-t-secondary: var(--t-secondary);
+  --color-t-muted: var(--t-muted);
+  --color-t-faint: var(--t-faint);
+
+  /* Theme-aware border */
+  --color-b-default: var(--b-default);
+  --color-b-light: var(--b-light);
+
+  /* Theme-aware card (no custom book color) */
+  --color-card: var(--card);
+
+  /* Backdrop */
+  --color-backdrop: var(--backdrop);
+}
+
+/* ===== Dark theme (default) ===== */
+:root {
+  --surface: #0f172a;
+  --surface-light: #1e293b;
+  --surface-lighter: #334155;
+  --t-primary: #f1f5f9;
+  --t-secondary: #cbd5e1;
+  --t-muted: #94a3b8;
+  --t-faint: #64748b;
+  --b-default: rgba(51,65,85,0.5);
+  --b-light: rgba(51,65,85,0.3);
+  --card: #1e293b;
+  --backdrop: rgba(0,0,0,0.7);
+  color-scheme: dark;
+}
+
+/* ===== Light theme ===== */
+:root.light {
+  --surface: #f1f5f9;
+  --surface-light: #ffffff;
+  --surface-lighter: #e2e8f0;
+  --t-primary: #0f172a;
+  --t-secondary: #334155;
+  --t-muted: #64748b;
+  --t-faint: #94a3b8;
+  --b-default: rgba(203,213,225,0.7);
+  --b-light: rgba(203,213,225,0.4);
+  --card: #ffffff;
+  --backdrop: rgba(0,0,0,0.4);
+  color-scheme: light;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-lighter) transparent;
+}
+
+::selection {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* ===== Mobile / PWA ===== */
+html {
+  /* Prevent pull-to-refresh on Android PWA */
+  overscroll-behavior-y: contain;
+}
+
+body {
+  /* iOS safe areas for notch & home indicator */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  /* Smoother tapping on mobile */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent text size adjust on orientation change */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Better touch targets */
+@media (pointer: coarse) {
+  button, a, select, input[type="checkbox"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  50% { box-shadow: 0 0 20px 4px rgba(59, 130, 246, 0.3); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}

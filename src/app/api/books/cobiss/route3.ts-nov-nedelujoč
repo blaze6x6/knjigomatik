@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(request: NextRequest) {
+  const isbnRaw = request.nextUrl.searchParams.get("isbn");
+  if (!isbnRaw) return NextResponse.json({ error: "Manjka ISBN" }, { status: 400 });
+
+  // 1. Očistimo vnos: odstranimo "ISBN:", vezaje in presledke
+  const isbn = isbnRaw.replace(/ISBN:|ISBN|[-\s]/gi, "").trim();
+
+  try {
+    // 2. Klic iskalnika COBISS
+    const searchRes = await fetch(`https://plus.cobiss.net/cobiss/si/sl/bib/search?q=${isbn}&db=cobib&mat=allmaterials`, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    });
+    
+    const html = await searchRes.text();
+    
+    // 3. Izvlečemo ID knjige
+    const match = html.match(/\/cobiss\/si\/sl\/bib\/(\d+)/);
+    if (!match) return NextResponse.json({ error: "Knjige v COBISS ni mogoče najti s tem ISBN." }, { status: 404 });
+    
+    const cobissId = match[1];
+
+    // 4. Za naslov in avtorja moramo "pogledati" v zapis (ker smo zgoraj dobili samo ID)
+    const detailRes = await fetch(`https://plus.cobiss.net/cobiss/si/sl/bib/${cobissId}`, {
+        headers: { "User-Agent": "Mozilla/5.0" }
+    });
+    const detailHtml = await detailRes.text();
+    
+    // Uporabimo enostavno regex iskanje za naslov in avtorja (brez cheerio, da je hitreje)
+    const titleMatch = detailHtml.match(/<h1[^>]*>(.*?)<\/h1>/);
+    const authorMatch = detailHtml.match(/<span[^>]*itemprop="author"[^>]*>(.*?)<\/span>/);
+
+    return NextResponse.json({
+      title: titleMatch ? titleMatch[1].trim() : "Najdeno (preveri naslov)",
+      author: authorMatch ? authorMatch[1].trim() : "Preveri avtorja",
+      year: null, // Letnico je težje dobiti brez cheerio, lahko jo vpišeš ročno
+      thumbnail: `https://d.cobiss.net/repository/si/thumbnails/cobib/${cobissId}.jpg`,
+      description: `https://plus.cobiss.net/cobiss/si/sl/bib/${cobissId}`
+    });
+  } catch (error) {
+    return NextResponse.json({ error: "Napaka pri uvozu" }, { status: 500 });
+  }
+}

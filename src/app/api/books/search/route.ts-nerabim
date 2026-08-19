@@ -1,0 +1,94 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+
+export interface GoogleBookResult {
+  id: string;
+  title: string;
+  authors: string[];
+  publishedDate?: string;
+  description?: string;
+  thumbnail?: string;
+  pageCount?: number;
+  publisher?: string;
+  isbn?: string;
+  categories?: string[];
+}
+
+export async function GET(request: NextRequest) {
+  const session = await getSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Neprijavljen" }, { status: 401 });
+  }
+
+  const searchParams = request.nextUrl.searchParams;
+  const query = searchParams.get("q");
+
+  if (!query || query.length < 2) {
+    return NextResponse.json({ books: [] });
+  }
+
+  try {
+    const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+    const apiKeyParam = apiKey ? `&key=${apiKey}` : "";
+    
+    const response = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=20&printType=books${apiKeyParam}`,
+      { next: { revalidate: 60 } }
+    );
+
+    if (!response.ok) {
+      console.error("Google Books API error:", response.status);
+      return NextResponse.json({ books: [] });
+    }
+
+    const data = await response.json();
+
+    if (!data.items) {
+      return NextResponse.json({ books: [] });
+    }
+
+    const books: GoogleBookResult[] = data.items.map((item: {
+      id: string;
+      volumeInfo: {
+        title?: string;
+        authors?: string[];
+        publishedDate?: string;
+        description?: string;
+        imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+        pageCount?: number;
+        publisher?: string;
+        industryIdentifiers?: { type: string; identifier: string }[];
+        categories?: string[];
+      };
+    }) => {
+      const info = item.volumeInfo;
+      const isbn = info.industryIdentifiers?.find(
+        (id) => id.type === "ISBN_13" || id.type === "ISBN_10"
+      )?.identifier;
+
+      // Convert HTTP to HTTPS for thumbnails
+      let thumbnail = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
+      if (thumbnail) {
+        thumbnail = thumbnail.replace("http://", "https://");
+      }
+
+      return {
+        id: item.id,
+        title: info.title || "Brez naslova",
+        authors: info.authors || ["Neznan avtor"],
+        publishedDate: info.publishedDate,
+        description: info.description,
+        thumbnail,
+        pageCount: info.pageCount,
+        publisher: info.publisher,
+        isbn,
+        categories: info.categories,
+      };
+    });
+
+    return NextResponse.json({ books });
+  } catch (error) {
+    console.error("Google Books search error:", error);
+    return NextResponse.json({ books: [] });
+  }
+}

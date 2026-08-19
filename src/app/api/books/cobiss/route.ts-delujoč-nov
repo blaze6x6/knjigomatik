@@ -1,0 +1,60 @@
+import { NextRequest, NextResponse } from "next/server";
+import * as cheerio from "cheerio";
+
+export async function GET(request: NextRequest) {
+  const isbn = request.nextUrl.searchParams.get("isbn");
+  if (!isbn) return NextResponse.json({ error: "Manjka ISBN" }, { status: 400 });
+
+  try {
+    // 1. Zanesljivo iskanje preko preverjene osnove (brez zapletenih čistil)
+    const searchRes = await fetch(`https://plus.cobiss.net/cobiss/si/sl/bib/search?q=IS=${encodeURIComponent(isbn)}&db=cobib&mat=allmaterials`);
+    const searchHtml = await searchRes.text();
+    
+    // Izvlečemo ID knjige
+    const match = searchHtml.match(/\/cobiss\/si\/sl\/bib\/(\d+)/);
+    if (!match) {
+      return NextResponse.json({ error: "Knjige v COBISS ni mogoče najti s tem ISBN-jem." }, { status: 404 });
+    }
+    
+    const cobissId = match[1];
+
+    // 2. Gremo direktno na stran s podrobnimi podatki (?format=detail), ki si jo odkril
+    const detailRes = await fetch(`https://plus.cobiss.net/cobiss/si/sl/data/cobib/${cobissId}?format=detail`);
+    const detailHtml = await detailRes.text();
+    
+    const $ = cheerio.load(detailHtml);
+
+    let title = "";
+    let author = "";
+    let year: number | null = null;
+
+    // 3. Preberemo tabelo s podatki
+    $("tr").each((_, row) => {
+      const label = $(row).find("td").first().text().trim();
+      const value = $(row).find("td").last().text().trim();
+
+      if (label === "Avtor") {
+        author = value;
+      } else if (label === "Naslov") {
+        // Očistimo naslov do prve poševnice ali oklepaja (npr. odstranimo prevajalce)
+        title = value.split("/")[0].split("[")[0].trim();
+      } else if (label === "Leto") {
+        const yearMatch = value.match(/\b(19|20)\d{2}\b/);
+        if (yearMatch) year = parseInt(yearMatch[0], 10);
+      }
+    });
+
+    // 4. Vrnemo vse podatke hkrati
+    return NextResponse.json({
+      title: title || "Neznan naslov",
+      author: author || "Neznan avtor",
+      year: year,
+      thumbnail: `https://d.cobiss.net/repository/si/thumbnails/cobib/${cobissId}`,
+      description: `https://plus.cobiss.net/cobiss/si/sl/bib/${cobissId}`
+    });
+
+  } catch (error) {
+    console.error("COBISS fetch error:", error);
+    return NextResponse.json({ error: "Napaka pri uvozu podatkov" }, { status: 500 });
+  }
+}

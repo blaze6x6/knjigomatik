@@ -1,0 +1,274 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import {
+  BookOpen, Plus, LogOut, Users, BarChart3, Library,
+  Search, Menu, X,
+} from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import BookCard from "./BookCard";
+import BookModal from "./BookModal";
+import StatsPanel from "./StatsPanel";
+import AdminPanel from "./AdminPanel";
+import ThemeToggle from "./ThemeToggle";
+import GoogleBooksSearch from "./GoogleBooksSearch";
+
+export interface BookData {
+  id: string;
+  userId: string;
+  googleBooksId: string | null;
+  title: string;
+  author: string;
+  status: "wishlist" | "reading" | "read" | "reserved" | "unavailable";
+  rating: number | null;
+  color: string;
+  notes: string | null;
+  genre: string | null;
+  year: number | null;
+  thumbnail: string | null;
+  description: string | null;
+  isbn: string | null;
+  pageCount: number | null;
+  publisher: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Props {
+  user: { userId: string; username: string; displayName: string; isAdmin: boolean };
+  onLogout: () => void;
+}
+
+type TabType = "books" | "stats" | "admin";
+type FilterStatus = "all" | "wishlist" | "reading" | "read" | "reserved" | "unavailable";
+
+export default function Dashboard({ user, onLogout }: Props) {
+  const [books, setBooks] = useState<BookData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>("books");
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [editingBook, setEditingBook] = useState<BookData | null>(null);
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+
+  const fetchBooks = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/books");
+      if (res.ok) {
+        const data = await res.json();
+        setBooks(data.books);
+      }
+    } catch (err) {
+      console.error("Fetch books error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchBooks(); }, [fetchBooks]);
+
+  function handleEdit(book: BookData) {
+    setEditingBook(book);
+    setShowBookModal(true);
+  }
+
+  async function handleDelete(bookId: string) {
+    if (!confirm("Ali ste prepričani, da želite izbrisati to knjigo?")) return;
+    try {
+      const res = await apiFetch(`/api/books/${bookId}`, { method: "DELETE" });
+      if (res.ok) setBooks((prev) => prev.filter((b) => b.id !== bookId));
+    } catch (err) { console.error("Delete error:", err); }
+  }
+
+  function handleBookSaved() {
+    setShowBookModal(false);
+    setEditingBook(null);
+    fetchBooks();
+  }
+
+  function handleBookAdded() {
+    setShowSearch(false);
+    fetchBooks();
+  }
+
+  const filteredBooks = books.filter((book) => {
+    return filterStatus === "all" || book.status === filterStatus;
+  });
+
+  const statusCounts = {
+    all: books.length,
+    wishlist: books.filter((b) => b.status === "wishlist").length,
+    reading: books.filter((b) => b.status === "reading").length,
+    read: books.filter((b) => b.status === "read").length,
+    reserved: books.filter((b) => b.status === "reserved").length,
+    unavailable: books.filter((b) => b.status === "unavailable").length,
+  };
+
+  const statusLabels: Record<FilterStatus, string> = {
+    all: "Vse",
+    wishlist: "Zaželjene",
+    reading: "V branju",
+    read: "Prebrane",
+    reserved: "Rezervirane",
+    unavailable: "Ni na voljo",
+  };
+
+  return (
+    <div className="min-h-screen bg-surface transition-colors duration-300">
+      {/* Top Navigation */}
+      <header className="bg-surface-light/80 backdrop-blur-xl border-b border-b-default sticky top-0 z-40 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-brand-600/20 rounded-xl flex items-center justify-center">
+                <BookOpen className="w-5 h-5 text-brand-400" />
+              </div>
+              <span className="font-bold text-lg text-t-primary hidden sm:block">Knjigomatik</span>
+            </div>
+
+            <nav className="hidden md:flex items-center gap-1">
+              <button onClick={() => setActiveTab("books")}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
+                  activeTab === "books" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
+                }`}>
+                <Library className="w-4 h-4" />Knjige
+              </button>
+              <button onClick={() => setActiveTab("stats")}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
+                  activeTab === "stats" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
+                }`}>
+                <BarChart3 className="w-4 h-4" />Statistika
+              </button>
+              {user.isAdmin && (
+                <button onClick={() => setActiveTab("admin")}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
+                    activeTab === "admin" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
+                  }`}>
+                  <Users className="w-4 h-4" />Uporabniki
+                </button>
+              )}
+            </nav>
+
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-accent-500 rounded-full flex items-center justify-center text-sm font-bold text-white">
+                  {user.displayName.charAt(0).toUpperCase()}
+                </div>
+                <div className="text-sm">
+                  <span className="text-t-secondary">{user.displayName}</span>
+                  {user.isAdmin && (
+                    <span className="ml-2 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-md font-medium">Admin</span>
+                  )}
+                </div>
+              </div>
+              <ThemeToggle />
+              <button onClick={onLogout}
+                className="p-2 text-t-muted hover:text-t-primary hover:bg-surface-lighter/50 rounded-lg transition cursor-pointer" title="Odjava">
+                <LogOut className="w-4 h-4" />
+              </button>
+              <button onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="md:hidden p-2 text-t-muted hover:text-t-primary rounded-lg transition cursor-pointer">
+                <Menu className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {showMobileMenu && (
+            <div className="md:hidden pb-3 flex gap-1 animate-fade-in">
+              <button onClick={() => { setActiveTab("books"); setShowMobileMenu(false); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "books" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
+                Knjige
+              </button>
+              <button onClick={() => { setActiveTab("stats"); setShowMobileMenu(false); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "stats" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
+                Statistika
+              </button>
+              {user.isAdmin && (
+                <button onClick={() => { setActiveTab("admin"); setShowMobileMenu(false); }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "admin" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
+                  Uporabniki
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {activeTab === "books" && (
+          <div className="animate-fade-in">
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+              <button onClick={() => setShowSearch(true)}
+                className="flex-1 bg-surface-light border border-b-default rounded-xl px-4 py-2.5 text-t-faint text-left flex items-center gap-2 hover:border-brand-500/50 transition cursor-pointer">
+                <Search className="w-4 h-4" />
+                Išči knjige v Google Books...
+              </button>
+              <button onClick={() => { setEditingBook(null); setShowBookModal(true); }}
+                className="bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition whitespace-nowrap cursor-pointer">
+                <Plus className="w-4 h-4" />Dodaj ročno
+              </button>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+              {(Object.keys(statusLabels) as FilterStatus[]).map((status) => (
+                <button key={status} onClick={() => setFilterStatus(status)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition cursor-pointer ${
+                    filterStatus === status
+                      ? "bg-brand-600 text-white"
+                      : "bg-surface-light text-t-muted hover:text-t-primary border border-b-default"
+                  }`}>
+                  {statusLabels[status]}
+                  <span className="ml-1.5 opacity-60">{statusCounts[status]}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Books Grid */}
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredBooks.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="w-16 h-16 bg-surface-light rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="w-8 h-8 text-t-faint" />
+                </div>
+                <p className="text-t-muted text-lg mb-2">
+                  {books.length === 0 ? "Še nimate dodanih knjig" : "Ni najdenih knjig"}
+                </p>
+                <p className="text-t-faint text-sm">
+                  {books.length === 0 ? "Kliknite na iskalno polje za iskanje knjig" : "Poskusite z drugim filtrom"}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredBooks.map((book, i) => (
+                  <div key={book.id} className="animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
+                    <BookCard book={book} onEdit={() => handleEdit(book)} onDelete={() => handleDelete(book.id)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "stats" && <StatsPanel />}
+        {activeTab === "admin" && user.isAdmin && <AdminPanel />}
+      </main>
+
+      {/* Modals */}
+      {showBookModal && (
+        <BookModal book={editingBook}
+          onClose={() => { setShowBookModal(false); setEditingBook(null); }}
+          onSaved={handleBookSaved} />
+      )}
+
+      {showSearch && (
+        <GoogleBooksSearch onClose={() => setShowSearch(false)} onBookAdded={handleBookAdded} />
+      )}
+    </div>
+  );
+}

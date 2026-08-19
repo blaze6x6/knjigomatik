@@ -1,0 +1,187 @@
+"use client";
+
+import { useState } from "react";
+import { Search, X, Plus, BookOpen, Loader2 } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import ModalPortal from "./ModalPortal";
+
+interface GoogleBookResult {
+  id: string;
+  title: string;
+  authors: string[];
+  publishedDate?: string;
+  description?: string;
+  thumbnail?: string;
+  pageCount?: number;
+  publisher?: string;
+  isbn?: string;
+  categories?: string[];
+}
+
+interface Props {
+  onClose: () => void;
+  onBookAdded: () => void;
+}
+
+type AddStatus = "wishlist" | "reading" | "read" | "reserved" | "unavailable";
+
+const STATUS_OPTIONS: { value: AddStatus; label: string; emoji: string }[] = [
+  { value: "wishlist", label: "Željene", emoji: "📌" },
+  { value: "reading", label: "V branju", emoji: "📖" },
+  { value: "read", label: "Prebrane", emoji: "✅" },
+  { value: "reserved", label: "Rezervirane", emoji: "🔖" },
+  { value: "unavailable", label: "Ni na voljo", emoji: "❌" },
+];
+
+export default function GoogleBooksSearch({ onClose, onBookAdded }: Props) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GoogleBookResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<AddStatus>("wishlist");
+
+  // Funkcija za iskanje, ki se sproži izključno preko gumba ali Enter tipke
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (query.trim().length < 2) return;
+
+    setLoading(true);
+    try {
+      const res = await apiFetch(`/api/books/search?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setResults(data.books);
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAddBook(book: GoogleBookResult) {
+    setAddingId(book.id);
+    try {
+      const res = await apiFetch("/api/books", {
+        method: "POST",
+        body: JSON.stringify({
+          googleBooksId: book.id,
+          title: book.title,
+          author: book.authors.join(", "),
+          status: selectedStatus,
+          year: book.publishedDate ? parseInt(book.publishedDate.substring(0, 4)) : null,
+          thumbnail: book.thumbnail,
+          description: book.description,
+          isbn: book.isbn,
+          pageCount: book.pageCount,
+          publisher: book.publisher,
+          genre: book.categories?.[0] || null,
+        }),
+      });
+      if (res.ok) {
+        onBookAdded();
+      }
+    } catch (err) {
+      console.error("Add book error:", err);
+    } finally {
+      setAddingId(null);
+    }
+  }
+
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 bg-backdrop backdrop-blur-sm" onClick={onClose} />
+      <div className="min-h-full flex flex-col items-center p-4 pt-[10vh]">
+        <div className="relative bg-surface-light border border-b-default rounded-2xl w-full max-w-2xl shadow-2xl animate-slide-up overflow-hidden transition-colors duration-300">
+          
+          {/* Header & Search Form */}
+          <form onSubmit={handleSearch} className="flex items-center gap-3 p-4 border-b border-b-default">
+            <Search className="w-5 h-5 text-t-faint shrink-0" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Išči knjige po naslovu, avtorju, ISBN..."
+              className="flex-1 bg-transparent text-t-primary placeholder-t-faint focus:outline-none text-lg"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={loading || query.trim().length < 2}
+              className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Išči"}
+            </button>
+            <button type="button" onClick={onClose} className="p-1 hover:bg-surface-lighter rounded-lg transition cursor-pointer">
+              <X className="w-5 h-5 text-t-muted" />
+            </button>
+          </form>
+
+          {/* Status selector */}
+          <div className="px-4 py-3 border-b border-b-default bg-surface/50">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-t-muted">Dodaj v:</span>
+              {STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setSelectedStatus(opt.value)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
+                    selectedStatus === opt.value
+                      ? "bg-brand-600 text-white"
+                      : "bg-surface-lighter text-t-muted hover:text-t-primary"
+                  }`}
+                >
+                  {opt.emoji} {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="max-h-[60vh] overflow-y-auto">
+            {results.length === 0 && !loading && (
+              <div className="py-12 text-center text-t-muted">
+                <Search className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                <p>Vnesite poizkušjo in kliknite &raquo;Išči&laquo;</p>
+              </div>
+            )}
+            
+            {results.map((book) => (
+              <div key={book.id} className="flex gap-4 p-4 border-b border-b-light last:border-0 hover:bg-surface-lighter/30 transition">
+                <div className="w-16 h-24 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                  {book.thumbnail ? (
+                    <img src={book.thumbnail} alt={book.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <BookOpen className="w-6 h-6 text-t-faint" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-t-primary truncate">{book.title}</h3>
+                  <p className="text-sm text-t-muted truncate">{book.authors?.join(", ")}</p>
+                  <div className="flex gap-3 mt-1 text-xs text-t-faint">
+                    {book.publishedDate && <span>{book.publishedDate.substring(0, 4)}</span>}
+                    {book.pageCount && <span>{book.pageCount} str.</span>}
+                    {book.publisher && <span className="truncate">{book.publisher}</span>}
+                  </div>
+                  {book.description && (
+                    <p className="text-xs text-t-faint mt-2 line-clamp-2">{book.description}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAddBook(book)}
+                  disabled={addingId === book.id}
+                  className="self-center shrink-0 bg-brand-600 hover:bg-brand-500 disabled:bg-brand-600/50 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer"
+                >
+                  {addingId === book.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Dodaj
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  );
+}

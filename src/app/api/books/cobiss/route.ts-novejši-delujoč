@@ -1,0 +1,94 @@
+import { NextRequest, NextResponse } from "next/server";
+import * as cheerio from "cheerio";
+
+export async function GET(request: NextRequest) {
+  const queryRaw = request.nextUrl.searchParams.get("isbn"); // parameter se še vedno imenuje isbn v frontendu
+  if (!queryRaw) return NextResponse.json({ error: "Manjka podatek (ISBN ali ID)" }, { status: 400 });
+
+  const query = queryRaw.trim();
+
+  try {
+    let cobissId = "";
+
+    // Preverimo, ali je vnos morda že čisti COBISS ID (samo številke)
+    if (/^\d+$/.test(query)) {
+      cobissId = query;
+    } else {
+      // Sicer počistimo ISBN in uporabimo tvoj odkriti ukazni iskalni URL za BN
+      const cleanIsbn = query.replace(/[^0-9X]/gi, "");
+      const commandSearchUrl = `https://plus.cobiss.net/cobiss/si/sl/search/cobib/command?q=BN=%22${cleanIsbn}%22`;
+      
+      const searchRes = await fetch(commandSearchUrl, {
+        cache: "no-store",
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": "https://plus.cobiss.net/"
+        }
+      });
+
+      const finalUrl = searchRes.url;
+      const urlMatch = finalUrl.match(/\/data\/cobib\/(\d+)/) || finalUrl.match(/\/bib\/(\d+)/);
+      
+      if (urlMatch) {
+        cobissId = urlMatch[1];
+      } else {
+        const searchHtml = await searchRes.text();
+        const match = searchHtml.match(/\/data\/cobib\/(\d+)/) || searchHtml.match(/\/bib\/(\d+)/);
+        
+        if (!match) {
+          return NextResponse.json({ error: "Knjige s tem podatkom ni mogoče najti v COBISS-u." }, { status: 404 });
+        }
+        cobissId = match[1];
+      }
+    }
+
+    // Sedaj ko imamo zanesljiv cobissId, gremo direktno na stran s podrobnimi podatki (?format=detail)
+    const detailUrl = `https://plus.cobiss.net/cobiss/si/sl/data/cobib/${cobissId}?format=detail`;
+    const detailRes = await fetch(detailUrl, {
+      cache: "no-store",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": `https://plus.cobiss.net/cobiss/si/sl/data/cobib/${cobissId}`
+      }
+    });
+    
+    if (!detailRes.ok) {
+      return NextResponse.json({ error: "Napaka pri pridobivanju podrobnosti knjige." }, { status: 404 });
+    }
+
+    const detailHtml = await detailRes.text();
+    const $ = cheerio.load(detailHtml);
+
+    let title = "";
+    let author = "";
+    let year: number | null = null;
+
+    // Preberemo tabelo s podatki
+    $("tr").each((_, row) => {
+      const label = $(row).find("td").first().text().trim();
+      const value = $(row).find("td").last().text().trim();
+
+      if (label === "Avtor") {
+        author = value;
+      } else if (label === "Naslov") {
+        title = value.split("/")[0].split("[")[0].trim();
+      } else if (label === "Leto") {
+        const yearMatch = value.match(/\b(19|20)\d{2}\b/);
+        if (yearMatch) year = parseInt(yearMatch[0], 10);
+      }
+    });
+
+    return NextResponse.json({
+      title: title || "Neznan naslov",
+      author: author || "Neznan avtor",
+      year: year,
+      thumbnail: `https://d.cobiss.net/repository/si/thumbnails/cobib/${cobissId}`,
+      description: `https://plus.cobiss.net/cobiss/si/sl/bib/${cobissId}`
+    });
+
+  } catch (error: any) {
+    console.error("COBISS error:", error);
+    return NextResponse.json({ error: `Napaka pri uvozu: ${error.message}` }, { status: 500 });
+  }
+}
