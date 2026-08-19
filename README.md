@@ -6,6 +6,7 @@ Moderna spletna aplikacija za upravljanje vaše knjižne zbirke. Kategorizirajte
 
 - **📖 Upravljanje knjig** — Dodajajte, urejajte in brišite knjige
 - **🏷️ Kategorizacija** — Neprebrane, v branju, prebrane, rezervirane
+- **📷 AI obdelava slik** — Po prenosu slike knjige umetna inteligenca avtomatsko zazna in vnese naslov knjige ter ime avtorja
 - **⭐ Ocenjevanje** — Ocena od 1 do 10 z zvezdičkami
 - **🎨 Barvno ozadje** — Izberite barvo ozadja za vsako knjigo
 - **📊 Statistika** — Pregled napredka branja in povprečne ocene
@@ -19,7 +20,7 @@ Moderna spletna aplikacija za upravljanje vaše knjižne zbirke. Kategorizirajte
 
 ```bash
 # Klonirajte repozitorij
-git clone <url-repozitorija>
+git clone Https://github.com/blaze6x6/knjigomatik
 cd knjigomatik
 
 # Zaženite
