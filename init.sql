@@ -1,7 +1,7 @@
 -- Knjigomatik Database Initialization
 
 DO $$ BEGIN
-    CREATE TYPE book_status AS ENUM ('wishlist', 'reading', 'read', 'reserved', 'unavailable', `cancelled`);
+    CREATE TYPE book_status AS ENUM ('wishlist', 'reading', 'read', 'reserved', 'unavailable', 'cancelled');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS books (
     status book_status NOT NULL DEFAULT 'wishlist',
     rating INTEGER CHECK (rating >= 1 AND rating <= 10),
     color VARCHAR(7) NOT NULL DEFAULT '#ffffff',
-    notes TEXT,
+    summary TEXT,
     genre VARCHAR(100),
     year INTEGER,
     thumbnail TEXT,
@@ -38,4 +38,3 @@ CREATE TABLE IF NOT EXISTS books (
 CREATE INDEX IF NOT EXISTS idx_books_user_id ON books(user_id);
 CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-
