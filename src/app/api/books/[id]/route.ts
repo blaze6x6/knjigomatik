@@ -17,7 +17,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { title, author, status, rating, color, notes, genre, year, thumbnail } = body;
+    const { title, author, status, rating, color, summary, genre, year, thumbnail } = body;
 
     if (!title || !author) {
       return NextResponse.json(
@@ -41,7 +41,7 @@ export async function PUT(
         status: status || "wishlist",
         rating: rating || null,
         color: color || "#ffffff",
-        notes: notes?.trim() || null,
+        summary: summary?.trim() || null,
         genre: genre?.trim() || null,
         year: year || null,
         thumbnail: thumbnail || null,
