@@ -23,7 +23,7 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
   const status = statusConfig[book.status] || statusConfig.wishlist;
 
   // Pomožna funkcija za varno krajšanje dolgega besedila povzetka
-  const getShortSummary = (text: string | null, maxLength = 10) => {
+  const getShortSummary = (text: string | null, maxLength = 40) => {
     if (!text) return "";
     return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
   };
