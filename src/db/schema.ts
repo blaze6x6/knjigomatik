@@ -37,7 +37,7 @@ export const books = pgTable("books", {
   status: bookStatusEnum("status").notNull().default("wishlist"),
   rating: integer("rating"),
   color: varchar("color", { length: 7 }).notNull().default("#ffffff"),
-  notes: text("notes"),
+  summary: text("summary"), // Spremenjeno iz notes v summary
   genre: varchar("genre", { length: 100 }),
   year: integer("year"),
   thumbnail: text("thumbnail"),
