@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   BookOpen, Plus, LogOut, Users, BarChart3, Library,
-  Search, Menu, X, Filter, ExternalLink,
+  Search, Menu, X, Filter, ExternalLink, Save, Trash2
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import BookCard from "./BookCard";
@@ -11,6 +11,7 @@ import BookModal from "./BookModal";
 import StatsPanel from "./StatsPanel";
 import AdminPanel from "./AdminPanel";
 import ThemeToggle from "./ThemeToggle";
+import ModalPortal from "./ModalPortal";
 
 export interface BookData {
   id: string;
@@ -21,7 +22,7 @@ export interface BookData {
   status: "wishlist" | "reading" | "read" | "reserved" | "unavailable" | "cancelled";
   rating: number | null;
   color: string;
-  notes: string | null;
+  summary: string | null; // Zamenjano iz notes
   genre: string | null;
   year: number | null;
   thumbnail: string | null;
@@ -47,6 +48,12 @@ export default function Dashboard({ user, onLogout }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>("books");
   const [showBookModal, setShowBookModal] = useState(false);
   const [editingBook, setEditingBook] = useState<BookData | null>(null);
+  
+  // Stanje za modalno okno za urejanje/prikaz povzetka
+  const [summaryModalBook, setSummaryModalBook] = useState<BookData | null>(null);
+  const [summaryText, setSummaryText] = useState("");
+  const [summarySaving, setSummarySaving] = useState(false);
+
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -87,6 +94,39 @@ export default function Dashboard({ user, onLogout }: Props) {
     fetchBooks();
   }
 
+  // Odpiranje modalnega okna za povzetek
+  function openSummaryModal(book: BookData) {
+    setSummaryModalBook(book);
+    setSummaryText(book.summary || "");
+  }
+
+  // Shranjevanje ali brisanje povzetka iz dashboard modalnega okna
+  async function handleSaveSummary() {
+    if (!summaryModalBook) return;
+    setSummarySaving(true);
+    try {
+      const res = await apiFetch(`/api/books/${summaryModalBook.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...summaryModalBook,
+          summary: summaryText.trim() ? summaryText.trim() : null,
+        }),
+      });
+      if (res.ok) {
+        setSummaryModalBook(null);
+        fetchBooks();
+      }
+    } catch (err) {
+      console.error("Napaka pri shranjevanju povzetka:", err);
+    } finally {
+      setSummarySaving(false);
+    }
+  }
+
+  async function handleDeleteSummary() {
+    setSummaryText("");
+  }
+
   const filteredBooks = books.filter((book) => {
     const matchesStatus = filterStatus === "all" || book.status === filterStatus;
     const query = searchQuery.toLowerCase();
@@ -118,7 +158,6 @@ export default function Dashboard({ user, onLogout }: Props) {
 
   return (
     <div className="min-h-screen bg-surface transition-colors duration-300">
-      {/* Top Navigation */}
       <header className="bg-surface-light/80 backdrop-blur-xl border-b border-b-default sticky top-0 z-40 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
@@ -149,7 +188,6 @@ export default function Dashboard({ user, onLogout }: Props) {
                   <Users className="w-4 h-4" />Uporabniki
                 </button>
               )}
-              {/* <--- DODAN COBISS GUMB ZA NAMIZJE */}
               <a 
                 href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" 
                 target="_blank" 
@@ -198,7 +236,6 @@ export default function Dashboard({ user, onLogout }: Props) {
                   Uporabniki
                 </button>
               )}
-              {/* <--- DODAN COBISS GUMB ZA MOBILNI MENI */}
               <a 
                 href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" 
                 target="_blank" 
@@ -215,7 +252,6 @@ export default function Dashboard({ user, onLogout }: Props) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {activeTab === "books" && (
           <div className="animate-fade-in">
-            {/* Action Bar / Local Search */}
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
               <div className="flex-1 bg-surface-light border border-b-default rounded-xl px-4 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-brand-500 transition">
                 <Search className="w-4 h-4 text-t-faint shrink-0" />
@@ -238,9 +274,7 @@ export default function Dashboard({ user, onLogout }: Props) {
               </button>
             </div>
 
-            {/* Status Filter: Desktop (horizontalni zavihki) & Mobile (gumb za filter / hamburger meni) */}
             <div className="mb-6">
-              {/* Mobilni gumb za odpiranje filtrov */}
               <div className="sm:hidden flex items-center justify-between mb-2">
                 <button
                   onClick={() => setShowMobileFilterMenu(!showMobileFilterMenu)}
@@ -254,7 +288,6 @@ export default function Dashboard({ user, onLogout }: Props) {
                 </button>
               </div>
 
-              {/* Mobilni spustni meni za filtre */}
               {showMobileFilterMenu && (
                 <div className="sm:hidden bg-surface-light border border-b-default rounded-xl p-2 mb-3 space-y-1 animate-fade-in shadow-lg">
                   {(Object.keys(statusLabels) as FilterStatus[]).map((status) => (
@@ -279,7 +312,6 @@ export default function Dashboard({ user, onLogout }: Props) {
                 </div>
               )}
 
-              {/* Namizni prikaz (skrit na telefonih, viden na sm in večjih zaslonih) */}
               <div className="hidden sm:flex gap-2 overflow-x-auto pb-1">
                 {(Object.keys(statusLabels) as FilterStatus[]).map((status) => (
                   <button key={status} onClick={() => setFilterStatus(status)}
@@ -295,7 +327,6 @@ export default function Dashboard({ user, onLogout }: Props) {
               </div>
             </div>
 
-            {/* Books Grid */}
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -316,7 +347,12 @@ export default function Dashboard({ user, onLogout }: Props) {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredBooks.map((book, i) => (
                   <div key={book.id} className="animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
-                    <BookCard book={book} onEdit={() => handleEdit(book)} onDelete={() => handleDelete(book.id)} />
+                    <BookCard 
+                      book={book} 
+                      onEdit={() => handleEdit(book)} 
+                      onDelete={() => handleDelete(book.id)} 
+                      onOpenSummary={() => openSummaryModal(book)}
+                    />
                   </div>
                 ))}
               </div>
@@ -328,11 +364,68 @@ export default function Dashboard({ user, onLogout }: Props) {
         {activeTab === "admin" && user.isAdmin && <AdminPanel />}
       </main>
 
-      {/* Modals */}
+      {/* Modal za urejanje knjige */}
       {showBookModal && (
         <BookModal book={editingBook}
           onClose={() => { setShowBookModal(false); setEditingBook(null); }}
           onSaved={handleBookSaved} />
+      )}
+
+      {/* Modalno okno za prikaz in urejanje povzetka */}
+      {summaryModalBook && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-backdrop backdrop-blur-sm" onClick={() => setSummaryModalBook(null)} />
+          <div className="min-h-full flex items-center justify-center p-4">
+            <div className="relative bg-surface-light border border-b-default rounded-2xl w-full max-w-lg shadow-2xl animate-slide-up p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-t-primary">Povzetek knjige</h3>
+                  <p className="text-xs text-t-muted">{summaryModalBook.title} – {summaryModalBook.author}</p>
+                </div>
+                <button onClick={() => setSummaryModalBook(null)} className="p-2 hover:bg-surface-lighter rounded-lg transition cursor-pointer">
+                  <X className="w-5 h-5 text-t-muted" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <textarea
+                  value={summaryText}
+                  onChange={(e) => setSummaryText(e.target.value)}
+                  placeholder="Napišite ali uredite povzetek knjige..."
+                  rows={6}
+                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-3 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none text-sm"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDeleteSummary}
+                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" /> Izbriši povzetek
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSummaryModalBook(null)}
+                      className="px-4 py-2 bg-surface-lighter hover:bg-surface-lighter/80 text-t-muted rounded-lg text-sm font-medium transition cursor-pointer"
+                    >
+                      Prekliči
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSummary}
+                      disabled={summarySaving}
+                      className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Save className="w-4 h-4" /> {summarySaving ? "Shranjujem..." : "Shrani povzetek"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
     </div>
   );
