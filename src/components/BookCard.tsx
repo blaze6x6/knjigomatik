@@ -22,8 +22,14 @@ const statusConfig: Record<string, { label: string; className: string; emoji: st
 export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Props) {
   const status = statusConfig[book.status] || statusConfig.wishlist;
 
+  // Pomožna funkcija za varno krajšanje dolgega besedila povzetka
+  const getShortSummary = (text: string | null, maxLength = 10) => {
+    if (!text) return "";
+    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  };
+
   return (
-    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between w-full">
+    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between w-full max-w-full">
       <div className="flex gap-3 p-4 min-w-0">
         {/* Thumbnail */}
         <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
@@ -83,23 +89,23 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
         </div>
       </div>
 
-      {/* Summary Footer / Button */}
+      {/* Summary Footer / Button - z vgrajenim krajšanjem in preprečevanjem izliva */}
       <div className="px-4 py-2.5 bg-surface-lighter/40 border-t border-b-light flex items-center justify-between gap-2 min-w-0">
         {book.summary ? (
           <button 
             onClick={onOpenSummary}
-            className="text-xs text-t-muted hover:text-brand-400 transition flex items-center gap-1.5 text-left min-w-0 flex-1"
+            className="text-xs text-t-muted hover:text-brand-400 transition flex items-center gap-1.5 text-left min-w-0 flex-1 overflow-hidden"
             title="Klikni za ogled celotnega povzetka"
           >
             <FileText className="w-3.5 h-3.5 shrink-0 text-brand-400" />
-            <span className="truncate italic">&ldquo;{book.summary}&rdquo;</span>
+            <span className="truncate italic">&ldquo;{getShortSummary(book.summary)}&rdquo;</span>
           </button>
         ) : (
-          <span className="text-xs text-t-faint italic truncate">Brez povzetka</span>
+          <span className="text-xs text-t-faint italic truncate flex-1">Brez povzetka</span>
         )}
         <button 
           onClick={onOpenSummary}
-          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer whitespace-nowrap"
+          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer whitespace-nowrap ml-auto"
         >
           {book.summary ? "Uredi" : "+ Povzetek"}
         </button>
