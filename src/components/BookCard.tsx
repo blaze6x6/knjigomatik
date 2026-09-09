@@ -7,7 +7,7 @@ interface Props {
   book: BookData;
   onEdit: () => void;
   onDelete: () => void;
-  onOpenSummary: () => void; // Nova funkcija za odpiranje modalnega okna s povzetkom
+  onOpenSummary: () => void;
 }
 
 const statusConfig: Record<string, { label: string; className: string; emoji: string }> = {
@@ -23,8 +23,8 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
   const status = statusConfig[book.status] || statusConfig.wishlist;
 
   return (
-    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between">
-      <div className="flex gap-3 p-4">
+    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between w-full">
+      <div className="flex gap-3 p-4 min-w-0">
         {/* Thumbnail */}
         <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
           {book.thumbnail ? (
@@ -37,8 +37,8 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
         {/* Content */}
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-t-primary leading-tight line-clamp-2" title={book.title}>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-t-primary leading-tight line-clamp-2 break-words" title={book.title}>
                 {book.title}
               </h3>
               <p className="text-sm text-t-muted truncate mt-0.5">{book.author}</p>
@@ -65,17 +65,17 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
           {/* Rating */}
           {book.rating !== null && (
             <div className="flex items-center gap-1 mt-2">
-              <div className="flex gap-0.5">
+              <div className="flex gap-0.5 overflow-hidden">
                 {Array.from({ length: 10 }, (_, i) => (
-                  <Star key={i} className={`w-3 h-3 ${i < book.rating! ? "fill-amber-400 text-amber-400" : "text-t-faint/30"}`} />
+                  <Star key={i} className={`w-3 h-3 shrink-0 ${i < book.rating! ? "fill-amber-400 text-amber-400" : "text-t-faint/30"}`} />
                 ))}
               </div>
-              <span className="text-xs text-t-muted ml-1">{book.rating}/10</span>
+              <span className="text-xs text-t-muted ml-1 shrink-0">{book.rating}/10</span>
             </div>
           )}
 
           {/* Meta */}
-          <div className="flex gap-2 mt-auto pt-2 text-xs text-t-faint">
+          <div className="flex flex-wrap gap-1 mt-auto pt-2 text-xs text-t-faint">
             {book.year && <span>{book.year}</span>}
             {book.genre && <span>• {book.genre}</span>}
             {book.pageCount && <span>• {book.pageCount} str.</span>}
@@ -84,24 +84,24 @@ export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Prop
       </div>
 
       {/* Summary Footer / Button */}
-      <div className="px-4 py-2.5 bg-surface-lighter/40 border-t border-b-light flex items-center justify-between">
+      <div className="px-4 py-2.5 bg-surface-lighter/40 border-t border-b-light flex items-center justify-between gap-2 min-w-0">
         {book.summary ? (
           <button 
             onClick={onOpenSummary}
-            className="text-xs text-t-muted truncate hover:text-brand-400 transition flex items-center gap-1.5 text-left flex-1 mr-2"
+            className="text-xs text-t-muted hover:text-brand-400 transition flex items-center gap-1.5 text-left min-w-0 flex-1"
             title="Klikni za ogled celotnega povzetka"
           >
             <FileText className="w-3.5 h-3.5 shrink-0 text-brand-400" />
             <span className="truncate italic">&ldquo;{book.summary}&rdquo;</span>
           </button>
         ) : (
-          <span className="text-xs text-t-faint italic">Brez povzetka</span>
+          <span className="text-xs text-t-faint italic truncate">Brez povzetka</span>
         )}
         <button 
           onClick={onOpenSummary}
-          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer"
+          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer whitespace-nowrap"
         >
-          {book.summary ? "Uredi povzetek" + "" : "+ Dodaj povzetek"}
+          {book.summary ? "Uredi" : "+ Povzetek"}
         </button>
       </div>
     </div>
