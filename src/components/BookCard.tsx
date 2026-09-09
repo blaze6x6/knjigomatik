@@ -1,12 +1,13 @@
 "use client";
 
-import { Edit3, Trash2, Star, BookOpen } from "lucide-react";
+import { Edit3, Trash2, Star, BookOpen, FileText } from "lucide-react";
 import type { BookData } from "./Dashboard";
 
 interface Props {
   book: BookData;
   onEdit: () => void;
   onDelete: () => void;
+  onOpenSummary: () => void; // Nova funkcija za odpiranje modalnega okna s povzetkom
 }
 
 const statusConfig: Record<string, { label: string; className: string; emoji: string }> = {
@@ -18,11 +19,11 @@ const statusConfig: Record<string, { label: string; className: string; emoji: st
   cancelled: { label: "Prenehal(a) z branjem", className: "bg-gray-500/20 text-gray-400 border-gray-500/30", emoji: "🚫" },
 };
 
-export default function BookCard({ book, onEdit, onDelete }: Props) {
+export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Props) {
   const status = statusConfig[book.status] || statusConfig.wishlist;
 
   return (
-    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30">
+    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between">
       <div className="flex gap-3 p-4">
         {/* Thumbnail */}
         <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
@@ -43,7 +44,6 @@ export default function BookCard({ book, onEdit, onDelete }: Props) {
               <p className="text-sm text-t-muted truncate mt-0.5">{book.author}</p>
             </div>
 
-            {/* Actions - Popravljeno: na mobilnih vedno vidno, na racunalniku ob hoverju */}
             <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
               <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-surface-lighter transition cursor-pointer" title="Uredi">
                 <Edit3 className="w-4 h-4 text-t-muted" />
@@ -83,14 +83,27 @@ export default function BookCard({ book, onEdit, onDelete }: Props) {
         </div>
       </div>
 
-      {/* Notes */}
-      {book.notes && (
-        <div className="px-4 pb-3">
-          <p className="text-xs text-t-faint italic line-clamp-2 border-t border-b-light pt-2">
-            &ldquo;{book.notes}&rdquo;
-          </p>
-        </div>
-      )}
+      {/* Summary Footer / Button */}
+      <div className="px-4 py-2.5 bg-surface-lighter/40 border-t border-b-light flex items-center justify-between">
+        {book.summary ? (
+          <button 
+            onClick={onOpenSummary}
+            className="text-xs text-t-muted truncate hover:text-brand-400 transition flex items-center gap-1.5 text-left flex-1 mr-2"
+            title="Klikni za ogled celotnega povzetka"
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0 text-brand-400" />
+            <span className="truncate italic">&ldquo;{book.summary}&rdquo;</span>
+          </button>
+        ) : (
+          <span className="text-xs text-t-faint italic">Brez povzetka</span>
+        )}
+        <button 
+          onClick={onOpenSummary}
+          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer"
+        >
+          {book.summary ? "Uredi povzetek" + "" : "+ Dodaj povzetek"}
+        </button>
+      </div>
     </div>
   );
 }
