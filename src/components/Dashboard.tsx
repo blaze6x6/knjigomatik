@@ -375,32 +375,31 @@ export default function Dashboard({ user, onLogout }: Props) {
       {summaryModalBook && (
         <ModalPortal>
           <div className="fixed inset-0 bg-backdrop backdrop-blur-sm" onClick={() => setSummaryModalBook(null)} />
-          <div className="min-h-full flex items-center justify-center p-4">
-            <div className="relative bg-surface-light border border-b-default rounded-2xl w-full max-w-lg shadow-2xl animate-slide-up p-6">
-              <div className="flex items-center justify-between mb-4">
+          <div className="min-h-full flex items-center justify-center p-2 sm:p-4">
+            <div className="relative bg-surface-light border border-b-default rounded-2xl w-[95vw] max-w-4xl h-[90vh] shadow-2xl animate-slide-up p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-4 shrink-0">
                 <div>
-                  <h3 className="text-lg font-bold text-t-primary">Povzetek knjige</h3>
-                  <p className="text-xs text-t-muted">{summaryModalBook.title} – {summaryModalBook.author}</p>
+                  <h3 className="text-xl font-bold text-t-primary">Povzetek knjige</h3>
+                  <p className="text-sm text-t-muted">{summaryModalBook.title} – {summaryModalBook.author}</p>
                 </div>
                 <button onClick={() => setSummaryModalBook(null)} className="p-2 hover:bg-surface-lighter rounded-lg transition cursor-pointer">
                   <X className="w-5 h-5 text-t-muted" />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 flex flex-col min-h-0">
                 <textarea
                   value={summaryText}
                   onChange={(e) => setSummaryText(e.target.value)}
                   placeholder="Napišite ali uredite povzetek knjige..."
-                  rows={6}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-3 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none text-sm"
+                  className="w-full flex-1 bg-surface border border-b-default rounded-lg px-4 py-3 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none text-base"
                 />
 
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 shrink-0 pt-2">
                   <button
                     type="button"
                     onClick={handleDeleteSummary}
-                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" /> Izbriši povzetek
                   </button>
@@ -408,7 +407,7 @@ export default function Dashboard({ user, onLogout }: Props) {
                     <button
                       type="button"
                       onClick={() => setSummaryModalBook(null)}
-                      className="px-4 py-2 bg-surface-lighter hover:bg-surface-lighter/80 text-t-muted rounded-lg text-sm font-medium transition cursor-pointer"
+                      className="px-4 py-2.5 bg-surface-lighter hover:bg-surface-lighter/80 text-t-muted rounded-lg text-sm font-medium transition cursor-pointer"
                     >
                       Prekliči
                     </button>
@@ -416,7 +415,7 @@ export default function Dashboard({ user, onLogout }: Props) {
                       type="button"
                       onClick={handleSaveSummary}
                       disabled={summarySaving}
-                      className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Save className="w-4 h-4" /> {summarySaving ? "Shranjujem..." : "Shrani povzetek"}
                     </button>
