@@ -32,7 +32,7 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
   const [author, setAuthor] = useState(book?.author || "");
   const [status, setStatus] = useState(book?.status || "wishlist");
   const [rating, setRating] = useState<number | null>(book?.rating ?? null);
-  const [notes, setNotes] = useState(book?.notes || "");
+  const [summary, setSummary] = useState(book?.summary || "");
   const [genre, setGenre] = useState(book?.genre || "");
   const [year, setYear] = useState<string>(book?.year?.toString() || "");
   const [thumbnail, setThumbnail] = useState(book?.thumbnail || "");
@@ -41,7 +41,6 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Funkcija za uvoz podatkov preko ISBN/COBISS številke
   async function handleIsbnImport() {
     if (!isbnInput.trim()) return;
     setImporting(true);
@@ -70,7 +69,7 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
     setLoading(true);
 
     const payload = {
-      title, author, status, rating, notes: notes || null,
+      title, author, status, rating, summary: summary || null,
       genre: genre || null, year: year ? parseInt(year) : null,
       thumbnail: thumbnail || null, color: "#ffffff",
     };
@@ -105,7 +104,6 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>
             )}
 
-            {/* ISBN/COBISS Import Section */}
             {!book && (
               <div className="p-3 bg-surface border border-brand-500/30 rounded-xl space-y-2">
                 <label className="block text-xs font-medium text-brand-400 flex items-center gap-1.5">
@@ -131,7 +129,6 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
               </div>
             )}
 
-            {/* Thumbnail preview */}
             <div className="flex gap-4">
               <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
                 {thumbnail ? (
@@ -195,7 +192,7 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
                     <option value="">Brez ocene</option>
                     {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
                       <option key={num} value={num}>
-                        ⭐ {num} / 10 {num >= 9 ? "(Odlično)" : num >= 7 ? "(Dobro)" : num >= 5 ? "(Povprečno)" : ""}
+                        ⭐ {num} / 10
                       </option>
                     ))}
                   </select>
@@ -208,10 +205,10 @@ export default function BookModal({ book, onClose, onSaved }: Props) {
             </div>
 
             <div>
-              <label className="block text-sm text-t-muted mb-1.5">Opombe</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+              <label className="block text-sm text-t-muted mb-1.5">Povzetek</label>
+              <textarea value={summary} onChange={(e) => setSummary(e.target.value)}
                 className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none"
-                placeholder="Vaše opombe o knjigi..." rows={2} />
+                placeholder="Napišite povzetek knjige..." rows={3} />
             </div>
 
             <button type="submit" disabled={loading}
