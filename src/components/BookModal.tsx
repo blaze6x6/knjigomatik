@@ -1,227 +1,229 @@
 "use client";
 
 import { useState } from "react";
-import { X, Save, Star, BookOpen, Link as LinkIcon, Loader2 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
-import ModalPortal from "./ModalPortal";
-import type { BookData } from "./Dashboard";
+import { Loader2, Save, ScanSearch, Star } from "lucide-react";
+import { apiJson } from "@/lib/api";
+import { BOOK_STATUSES, GENRES, SPINE_COLORS, STATUS, type BookStatus } from "@/lib/status";
+import type { BookData } from "@/lib/types";
+import BookCover from "./BookCover";
+import Modal from "./Modal";
 
 interface Props {
   book: BookData | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (book: BookData, isNew: boolean) => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: "wishlist", label: "Želja", emoji: "💫" },
-  { value: "reading", label: "V branju", emoji: "📖" },
-  { value: "read", label: "Prebrana", emoji: "✅" },
-  { value: "reserved", label: "Rezervirana", emoji: "📌" },
-  { value: "unavailable", label: "Ni na voljo", emoji: "❌" },
-  { value: "cancelled", label: "Prenehal(a) z branjem", emoji: "🚫"},
-];
-
-const GENRES = [
-  "Roman", "Kriminalka", "Fantazija", "Znanstvena fantastika", "Triler",
-  "Biografija", "Zgodovina", "Znanost", "Poezija", "Filozofija",
-  "Samopomoč", "Potopis", "Drama", "Komedija", "Mladinska", "Strokovna", "Drugo",
-];
+interface Found {
+  title: string | null; author: string | null; year: number | null; thumbnail: string | null;
+  isbn: string | null; pageCount: number | null; publisher: string | null; link: string | null; note?: string; source?: string;
+}
 
 export default function BookModal({ book, onClose, onSaved }: Props) {
   const [title, setTitle] = useState(book?.title || "");
   const [author, setAuthor] = useState(book?.author || "");
-  const [status, setStatus] = useState(book?.status || "wishlist");
+  const [status, setStatus] = useState<BookStatus>(book?.status || "wishlist");
   const [rating, setRating] = useState<number | null>(book?.rating ?? null);
-  const [summary, setSummary] = useState(book?.summary || "");
   const [genre, setGenre] = useState(book?.genre || "");
-  const [year, setYear] = useState<string>(book?.year?.toString() || "");
+  const [year, setYear] = useState(book?.year?.toString() || "");
+  const [pageCount, setPageCount] = useState(book?.pageCount?.toString() || "");
+  const [publisher, setPublisher] = useState(book?.publisher || "");
+  const [isbn, setIsbn] = useState(book?.isbn || "");
   const [thumbnail, setThumbnail] = useState(book?.thumbnail || "");
-  const [isbnInput, setIsbnInput] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [startedAt, setStartedAt] = useState(book?.startedAt || "");
+  const [finishedAt, setFinishedAt] = useState(book?.finishedAt || "");
+  const [color, setColor] = useState(book?.color || "#ffffff");
+  const [summary, setSummary] = useState(book?.summary || "");
+  const [description, setDescription] = useState(book?.description || "");
 
-  async function handleIsbnImport() {
-    if (!isbnInput.trim()) return;
-    setImporting(true);
-    setError("");
-    try {
-      const res = await apiFetch(`/api/books/cobiss?isbn=${encodeURIComponent(isbnInput)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Knjige ni bilo mogoče najti");
-        return;
-      }
-      if (data.title) setTitle(data.title);
-      if (data.author) setAuthor(data.author);
-      if (data.year) setYear(data.year.toString());
-      if (data.thumbnail) setThumbnail(data.thumbnail);
-    } catch {
-      setError("Napaka pri povezavi s strežnikom");
-    } finally {
-      setImporting(false);
-    }
+  const [lookupQ, setLookupQ] = useState("");
+  const [looking, setLooking] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState<{ kind: "ok" | "info" | "error"; text: string } | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // genre iz starejših zapisov, ki ni na seznamu, ostane izbirljiv
+  const genreOptions = genre && !GENRES.includes(genre) ? [genre, ...GENRES] : GENRES;
+
+  async function lookup() {
+    if (!lookupQ.trim()) return;
+    setLooking(true);
+    setLookupMsg(null);
+    const res = await apiJson<Found>(`/api/books/lookup?q=${encodeURIComponent(lookupQ)}`);
+    setLooking(false);
+    if (!res.ok) return setLookupMsg({ kind: "error", text: res.error });
+    const f = res.data;
+    if (f.title) setTitle(f.title);
+    if (f.author) setAuthor(f.author);
+    if (f.year) setYear(String(f.year));
+    if (f.thumbnail) setThumbnail(f.thumbnail);
+    if (f.isbn) setIsbn(f.isbn);
+    if (f.pageCount) setPageCount(String(f.pageCount));
+    if (f.publisher) setPublisher(f.publisher);
+    if (f.link?.startsWith("https://plus.cobiss.net/")) setDescription(f.link);
+    if (f.title || f.author) setLookupMsg({ kind: "ok", text: `Podatki prebrani (${f.source}). Preglejte jih pred shranjevanjem.${f.note ? " " + f.note : ""}` });
+    else setLookupMsg({ kind: "info", text: f.note || "Podatkov ni bilo mogoče najti." });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setLoading(true);
-
+    setSaving(true);
     const payload = {
-      title, author, status, rating, summary: summary || null,
-      genre: genre || null, year: year ? parseInt(year) : null,
-      thumbnail: thumbnail || null, color: "#ffffff",
+      title, author, status, rating,
+      genre: genre || null,
+      year: year || null,
+      pageCount: pageCount || null,
+      publisher: publisher || null,
+      isbn: isbn || null,
+      thumbnail: thumbnail || null,
+      startedAt: startedAt || null,
+      finishedAt: finishedAt || null,
+      color,
+      summary: summary || null,
+      description: description || null,
     };
-
-    try {
-      const url = book ? `/api/books/${book.id}` : "/api/books";
-      const method = book ? "PUT" : "POST";
-      const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Napaka"); return; }
-      onSaved();
-    } catch { setError("Napaka pri shranjevanju"); }
-    finally { setLoading(false); }
+    const res = await apiJson<{ book: BookData }>(book ? `/api/books/${book.id}` : "/api/books", {
+      method: book ? "PUT" : "POST",
+      body: JSON.stringify(payload),
+    });
+    setSaving(false);
+    if (!res.ok) return setError(res.error);
+    onSaved(res.data.book, !book);
   }
 
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 bg-backdrop backdrop-blur-sm" onClick={onClose} />
-      <div className="min-h-full flex items-center justify-center p-4">
-        <div className="relative bg-surface-light border border-b-default rounded-2xl w-full max-w-lg shadow-2xl animate-slide-up my-8 transition-colors duration-300">
-          <div className="flex items-center justify-between p-6 pb-0">
-            <h2 className="text-xl font-bold text-t-primary">
-              {book ? "Uredi knjigo" : "Dodaj knjigo ročno"}
-            </h2>
-            <button onClick={onClose} className="p-2 hover:bg-surface-lighter rounded-lg transition cursor-pointer">
-              <X className="w-5 h-5 text-t-muted" />
-            </button>
+    <Modal title={book ? "Uredi knjigo" : "Nova knjiga"} onClose={onClose} size="lg">
+      <form onSubmit={submit} className="space-y-5">
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+
+        {!book && (
+          <div className="rounded-xl border border-dashed border-line bg-sunk/40 p-3.5">
+            <label htmlFor="lookup" className="label flex items-center gap-1.5"><ScanSearch className="w-4 h-4" />Hitri vnos z ISBN ali COBISS številko</label>
+            <div className="flex gap-2">
+              <input
+                id="lookup" className="input" value={lookupQ} onChange={(e) => setLookupQ(e.target.value)} inputMode="numeric"
+                placeholder="npr. 9789610155050"
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookup(); } }}
+              />
+              <button type="button" className="btn btn-ghost shrink-0" onClick={lookup} disabled={looking || !lookupQ.trim()}>
+                {looking ? <Loader2 className="w-4 h-4 animate-spin" /> : "Poišči"}
+              </button>
+            </div>
+            {lookupMsg && <div className={`alert mt-2.5 ${lookupMsg.kind === "error" ? "alert-error" : lookupMsg.kind === "ok" ? "alert-ok" : "alert-info"}`}>{lookupMsg.text}</div>}
           </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>
-            )}
-
-            {!book && (
-              <div className="p-3 bg-surface border border-brand-500/30 rounded-xl space-y-2">
-                <label className="block text-xs font-medium text-brand-400 flex items-center gap-1.5">
-                  <LinkIcon className="w-3.5 h-3.5" /> Hitri uvoz prek ISBN/COBISS številke
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={isbnInput}
-                    onChange={(e) => setIsbnInput(e.target.value)}
-                    className="flex-1 bg-surface-light border border-b-default rounded-lg px-3 py-1.5 text-t-primary placeholder-t-faint text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    placeholder="Npr. 9789610155050 ali COBISS ID"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleIsbnImport}
-                    disabled={importing || !isbnInput.trim()}
-                    className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 flex items-center gap-1"
-                  >
-                    {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Uvozi"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-4">
-              <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
-                {thumbnail ? (
-                  <img src={thumbnail} alt="Cover" className="w-full h-full object-cover" />
-                ) : (
-                  <BookOpen className="w-8 h-8 text-t-faint" />
-                )}
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm text-t-muted mb-1.5">URL naslovnice</label>
-                <input type="url" value={thumbnail} onChange={(e) => setThumbnail(e.target.value)}
-                  className="w-full bg-surface border border-b-default rounded-lg px-3 py-2 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition text-sm"
-                  placeholder="https://..." />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm text-t-muted mb-1.5">Naslov *</label>
-                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
-                  placeholder="Naslov knjige" required />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm text-t-muted mb-1.5">Avtor *</label>
-                <input type="text" value={author} onChange={(e) => setAuthor(e.target.value)}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
-                  placeholder="Ime avtorja" required />
-              </div>
-              <div>
-                <label className="block text-sm text-t-muted mb-1.5">Status</label>
-                <select value={status} onChange={(e) => setStatus(e.target.value as BookData["status"])}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary focus:outline-none focus:ring-2 focus:ring-brand-500 transition cursor-pointer">
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.emoji} {opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-t-muted mb-1.5">Žanr</label>
-                <select value={genre} onChange={(e) => setGenre(e.target.value)}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary focus:outline-none focus:ring-2 focus:ring-brand-500 transition cursor-pointer">
-                  <option value="">Brez žanra</option>
-                  {GENRES.map((g) => (<option key={g} value={g}>{g}</option>))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-t-muted mb-1.5">Leto</label>
-                <input type="number" value={year} onChange={(e) => setYear(e.target.value)}
-                  className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
-                  placeholder="2023" min="1000" max="2100" />
-              </div>
-              <div>
-                <label className="block text-sm text-t-muted mb-1.5">Ocena (1–10)</label>
-                <div className="relative">
-                  <select
-                    value={rating !== null ? rating : ""}
-                    onChange={(e) => setRating(e.target.value ? parseInt(e.target.value, 10) : null)}
-                    className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary focus:outline-none focus:ring-2 focus:ring-brand-500 transition cursor-pointer appearance-none pr-10"
-                  >
-                    <option value="">Brez ocene</option>
-                    {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
-                      <option key={num} value={num}>
-                        ⭐ {num} / 10
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-amber-400 flex items-center gap-1 text-sm font-medium">
-                    {rating !== null && <span className="text-t-primary font-bold">{rating}/10</span>}
-                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
+        <div className="flex gap-4">
+          <BookCover title={title || "Naslov"} author={author} thumbnail={thumbnail || null} color={color} className="w-24 h-[136px]" />
+          <div className="flex-1 min-w-0 space-y-3">
             <div>
-              <label className="block text-sm text-t-muted mb-1.5">Povzetek</label>
-              <textarea value={summary} onChange={(e) => setSummary(e.target.value)}
-                className="w-full bg-surface border border-b-default rounded-lg px-4 py-2.5 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none"
-                placeholder="Napišite povzetek knjige..." rows={3} />
+              <label htmlFor="b-title" className="label">Naslov *</label>
+              <input id="b-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={500} />
             </div>
-
-            <button type="submit" disabled={loading}
-              className="w-full bg-brand-600 hover:bg-brand-500 disabled:bg-brand-600/50 text-white font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer">
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <><Save className="w-4 h-4" />{book ? "Shrani spremembe" : "Dodaj knjigo"}</>
-              )}
-            </button>
-          </form>
+            <div>
+              <label htmlFor="b-author" className="label">Avtor *</label>
+              <input id="b-author" className="input" value={author} onChange={(e) => setAuthor(e.target.value)} required maxLength={500} />
+            </div>
+          </div>
         </div>
-      </div>
-    </ModalPortal>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="b-status" className="label">Status</label>
+            <select id="b-status" className="input" value={status} onChange={(e) => setStatus(e.target.value as BookStatus)}>
+              {BOOK_STATUSES.map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="b-genre" className="label">Žanr</label>
+            <select id="b-genre" className="input" value={genre} onChange={(e) => setGenre(e.target.value)}>
+              <option value="">Brez žanra</option>
+              {genreOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="b-start" className="label">Začetek branja</label>
+            <input id="b-start" type="date" className="input" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="b-end" className="label">Konec branja</label>
+            <input id="b-end" type="date" className="input" value={finishedAt} min={startedAt || undefined} onChange={(e) => setFinishedAt(e.target.value)} />
+          </div>
+        </div>
+
+        <div>
+          <span className="label">Ocena</span>
+          <div className="flex items-center flex-wrap gap-0.5" role="radiogroup" aria-label="Ocena od 1 do 10">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} od 10`}
+                onClick={() => setRating(rating === n ? null : n)}
+                className="btn btn-icon p-1!"
+              >
+                <Star className={`w-6 h-6 ${rating !== null && n <= rating ? "fill-brass text-brass" : "text-faint"}`} />
+              </button>
+            ))}
+            <span className="ml-2 text-sm font-semibold text-ink-2 tabular-nums">{rating !== null ? `${rating}/10` : "Brez ocene"}</span>
+            {rating !== null && <button type="button" className="btn btn-icon text-xs! ml-1 px-2!" onClick={() => setRating(null)}>Počisti</button>}
+          </div>
+        </div>
+
+        <details className="group rounded-xl border border-line">
+          <summary className="cursor-pointer select-none px-3.5 py-2.5 text-sm font-semibold text-ink-2">Več podrobnosti (leto, strani, ISBN, naslovnica, barva)</summary>
+          <div className="px-3.5 pb-4 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="b-year" className="label">Leto izida</label>
+              <input id="b-year" type="number" inputMode="numeric" className="input" value={year} onChange={(e) => setYear(e.target.value)} min={1000} max={2100} />
+            </div>
+            <div>
+              <label htmlFor="b-pages" className="label">Število strani</label>
+              <input id="b-pages" type="number" inputMode="numeric" className="input" value={pageCount} onChange={(e) => setPageCount(e.target.value)} min={1} max={20000} />
+            </div>
+            <div>
+              <label htmlFor="b-pub" className="label">Založnik</label>
+              <input id="b-pub" className="input" value={publisher} onChange={(e) => setPublisher(e.target.value)} maxLength={255} />
+            </div>
+            <div>
+              <label htmlFor="b-isbn" className="label">ISBN</label>
+              <input id="b-isbn" className="input" value={isbn} onChange={(e) => setIsbn(e.target.value)} maxLength={20} />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="b-thumb" className="label">Naslov slike naslovnice (URL)</label>
+              <input id="b-thumb" type="url" className="input" value={thumbnail} onChange={(e) => setThumbnail(e.target.value)} placeholder="https://…" />
+            </div>
+            <div className="sm:col-span-2">
+              <span className="label">Barva hrbta</span>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Barva hrbta knjige">
+                {SPINE_COLORS.map((c) => (
+                  <button
+                    key={c} type="button" role="radio" aria-checked={color.toLowerCase() === c}
+                    aria-label={c === "#ffffff" ? "Privzeta (po statusu)" : c}
+                    title={c === "#ffffff" ? "Privzeta (po statusu)" : c}
+                    onClick={() => setColor(c)}
+                    className="w-8 h-8 rounded-full border-2 cursor-pointer flex items-center justify-center text-[10px] text-muted"
+                    style={{ background: c === "#ffffff" ? "var(--card)" : c, borderColor: color.toLowerCase() === c ? "var(--ink)" : "var(--line)" }}
+                  >
+                    {c === "#ffffff" ? "A" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div>
+          <label htmlFor="b-sum" className="label">Povzetek in vtisi</label>
+          <textarea id="b-sum" className="input" rows={4} value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={20000} placeholder="Neobvezno" />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Prekliči</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            <Save className="w-4 h-4" />{saving ? "Shranjujem …" : book ? "Shrani spremembe" : "Dodaj knjigo"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

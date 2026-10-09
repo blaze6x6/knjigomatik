@@ -1,24 +1,19 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __knjigomatikPool: Pool | undefined;
+}
+
 const databaseUrl = process.env.DATABASE_URL;
-
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
+  throw new Error("DATABASE_URL ni nastavljen");
 }
 
-const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
-};
+// Pool se do prve poizvedbe ne poveže, zato je build brez baze mogoč.
+export const pool: Pool =
+  globalThis.__knjigomatikPool ??
+  (globalThis.__knjigomatikPool = new Pool({ connectionString: databaseUrl, max: 10 }));
 
-export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
-    connectionString: databaseUrl,
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
-}
-
-export const db = drizzle(pool);
+export const db = drizzle({ client: pool });

@@ -1,91 +1,65 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiJson } from "@/lib/api";
+import type { SessionUserInfo } from "@/lib/types";
 import LoginPage from "@/components/LoginPage";
-import RegisterPage from "@/components/RegisterPage";
+import SetupPage from "@/components/SetupPage";
 import Dashboard from "@/components/Dashboard";
+import Logo from "@/components/Logo";
 
-interface UserInfo {
-  userId: string;
-  username: string;
-  displayName: string;
-  isAdmin: boolean;
-}
+type View = "loading" | "error" | "setup" | "login" | "app";
 
 export default function Home() {
-  const [loading, setLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [showRegister, setShowRegister] = useState(false);
+  const [view, setView] = useState<View>("loading");
+  const [user, setUser] = useState<SessionUserInfo | null>(null);
+  const [emailEnabled, setEmailEnabled] = useState(false);
 
-  useEffect(() => { checkAuth(); }, []);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const setup = await apiJson<{ needsSetup: boolean; emailEnabled?: boolean }>("/api/setup");
+      if (!alive) return;
+      if (!setup.ok) return setView("error");
+      setEmailEnabled(!!setup.data.emailEnabled);
+      if (setup.data.needsSetup) return setView("setup");
+      const me = await apiJson<{ user: SessionUserInfo }>("/api/auth/me");
+      if (!alive) return;
+      if (me.ok && me.data.user) { setUser(me.data.user); setView("app"); } else setView("login");
+    })();
+    return () => { alive = false; };
+  }, []);
 
-  async function checkAuth() {
-    try {
-      const [setupRes, authRes] = await Promise.all([
-        apiFetch("/api/setup"),
-        apiFetch("/api/auth/me"),
-      ]);
-      const setupData = await setupRes.json();
-      if (setupData.needsSetup) {
-        setNeedsSetup(true);
-        setShowRegister(true);
-        setLoading(false);
-        return;
-      }
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        if (authData.user) setUser(authData.user);
-      }
-    } catch (err) { console.error("Auth check error:", err); }
-    setLoading(false);
+  function enter(u: SessionUserInfo) {
+    setUser(u);
+    setView("app");
   }
 
-  function handleAuthSuccess(u: Record<string, unknown>) {
-    setUser({
-      userId: (u.userId || u.id) as string,
-      username: u.username as string,
-      displayName: u.displayName as string,
-      isAdmin: u.isAdmin as boolean,
-    });
-    setNeedsSetup(false);
-  }
-
-  async function handleLogout() {
-    await apiFetch("/api/auth/logout", { method: "POST" });
+  async function logout() {
+    await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
-    setShowRegister(false);
+    setView("login");
   }
 
-  if (loading) {
+  if (view === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface transition-colors duration-300">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-t-muted text-sm">Nalagam...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse"><Logo size={48} /></div>
+      </div>
+    );
+  }
+  if (view === "error") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 text-center">
+        <div className="max-w-sm">
+          <h1 className="heading text-2xl font-semibold mb-2">Strežnik ni dosegljiv</h1>
+          <p className="text-sm text-muted mb-4">Baza podatkov se morda še zaganja. Poskusite znova čez nekaj sekund.</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Poskusi znova</button>
         </div>
       </div>
     );
   }
-
-  if (!user) {
-    if (showRegister || needsSetup) {
-      return (
-        <RegisterPage
-          isFirstUser={needsSetup}
-          onSuccess={handleAuthSuccess}
-          onSwitchToLogin={needsSetup ? undefined : () => setShowRegister(false)}
-        />
-      );
-    }
-    return (
-      <LoginPage
-        onSuccess={handleAuthSuccess}
-        onSwitchToRegister={() => setShowRegister(true)}
-      />
-    );
-  }
-
-  return <Dashboard user={user} onLogout={handleLogout} />;
+  if (view === "setup") return <SetupPage onSuccess={enter} />;
+  if (view === "login" || !user) return <LoginPage onSuccess={enter} emailEnabled={emailEnabled} />;
+  return <Dashboard user={user} onLogout={logout} onUserChange={setUser} emailEnabled={emailEnabled} />;
 }

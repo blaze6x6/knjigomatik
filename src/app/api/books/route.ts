@@ -1,88 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { books } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { getSession } from "@/lib/auth";
+import { isResponse, requireUser } from "@/lib/auth";
+import { fail, readJson } from "@/lib/http";
+import * as v from "@/lib/validate";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const session = await getSession(request);
-  if (!session) {
-    return NextResponse.json({ error: "Neprijavljen" }, { status: 401 });
-  }
-
-  const userBooks = await db
-    .select()
-    .from(books)
-    .where(eq(books.userId, session.userId))
-    .orderBy(desc(books.updatedAt));
-
-  return NextResponse.json({ books: userBooks });
+  const user = await requireUser(request);
+  if (isResponse(user)) return user;
+  const list = await db.select().from(books).where(eq(books.userId, user.userId)).orderBy(desc(books.updatedAt));
+  return NextResponse.json({ books: list });
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession(request);
-  if (!session) {
-    return NextResponse.json({ error: "Neprijavljen" }, { status: 401 });
-  }
+  const user = await requireUser(request);
+  if (isResponse(user)) return user;
+  const body = await readJson(request);
+  if (!body) return fail("Neveljavna zahteva");
+
+  const parsed = v.bookInput(body, "create");
+  if (parsed.error) return fail(parsed.error);
+  const val = { ...parsed.value! };
+
+  // samodejni datumi ob ustvarjanju z ustreznim statusom
+  if (val.status === "reading" && val.startedAt === undefined) val.startedAt = v.today();
+  if (val.status === "read" && val.finishedAt === undefined) val.finishedAt = v.today();
 
   try {
-    const body = await request.json();
-    const {
-      title,
-      author,
-      status,
-      rating,
-      color,
-      summary,
-      genre,
-      year,
-      thumbnail,
-      description,
-      isbn,
-      pageCount,
-      publisher,
-    } = body;
-
-    if (!title || !author) {
-      return NextResponse.json(
-        { error: "Naslov in avtor sta obvezna" },
-        { status: 400 }
-      );
-    }
-
-    if (rating !== null && rating !== undefined && (rating < 1 || rating > 10)) {
-      return NextResponse.json(
-        { error: "Ocena mora biti med 1 in 10" },
-        { status: 400 }
-      );
-    }
-
     const [book] = await db
       .insert(books)
-      .values({
-        userId: session.userId,
-        title: title.trim(),
-        author: author.trim(),
-        status: status || "wishlist",
-        rating: rating || null,
-        color: color || "#ffffff",
-        summary: summary?.trim() || null,
-        genre: genre?.trim() || null,
-        year: year || null,
-        thumbnail: thumbnail || null,
-        description: description || null,
-        isbn: isbn || null,
-        pageCount: pageCount || null,
-        publisher: publisher || null,
-      })
+      .values({ ...val, title: val.title!, author: val.author!, userId: user.userId })
       .returning();
-
     return NextResponse.json({ book }, { status: 201 });
-  } catch (error) {
-    console.error("Create book error:", error);
-    return NextResponse.json(
-      { error: "Napaka pri dodajanju knjige" },
-      { status: 500 }
-    );
+  } catch (e) {
+    console.error("Create book error:", e);
+    return fail("Napaka pri dodajanju knjige", 500);
   }
 }

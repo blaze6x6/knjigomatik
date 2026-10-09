@@ -1,102 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { books } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { getSession } from "@/lib/auth";
+import { isResponse, requireUser } from "@/lib/auth";
+import { fail, isUuid, readJson } from "@/lib/http";
+import * as v from "@/lib/validate";
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getSession(request);
-  if (!session) {
-    return NextResponse.json({ error: "Neprijavljen" }, { status: 401 });
-  }
+type Ctx = { params: Promise<{ id: string }> };
 
+/** Delna posodobitev: spremenijo se samo podana polja. */
+export async function PUT(request: NextRequest, { params }: Ctx) {
+  const user = await requireUser(request);
+  if (isResponse(user)) return user;
   const { id } = await params;
+  if (!isUuid(id)) return fail("Knjiga ni najdena", 404);
 
-  try {
-    const body = await request.json();
-    const { title, author, status, rating, color, summary, genre, year, thumbnail } = body;
+  const body = await readJson(request);
+  if (!body) return fail("Neveljavna zahteva");
+  const parsed = v.bookInput(body, "update");
+  if (parsed.error) return fail(parsed.error);
+  const val = { ...parsed.value! };
 
-    if (!title || !author) {
-      return NextResponse.json(
-        { error: "Naslov in avtor sta obvezna" },
-        { status: 400 }
-      );
-    }
+  const [existing] = await db.select().from(books).where(and(eq(books.id, id), eq(books.userId, user.userId)));
+  if (!existing) return fail("Knjiga ni najdena", 404);
 
-    if (rating !== null && rating !== undefined && (rating < 1 || rating > 10)) {
-      return NextResponse.json(
-        { error: "Ocena mora biti med 1 in 10" },
-        { status: 400 }
-      );
-    }
-
-    const [book] = await db
-      .update(books)
-      .set({
-        title: title.trim(),
-        author: author.trim(),
-        status: status || "wishlist",
-        rating: rating || null,
-        color: color || "#ffffff",
-        summary: summary?.trim() || null,
-        genre: genre?.trim() || null,
-        year: year || null,
-        thumbnail: thumbnail || null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(books.id, id), eq(books.userId, session.userId)))
-      .returning();
-
-    if (!book) {
-      return NextResponse.json(
-        { error: "Knjiga ni najdena" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ book });
-  } catch (error) {
-    console.error("Update book error:", error);
-    return NextResponse.json(
-      { error: "Napaka pri urejanju knjige" },
-      { status: 500 }
-    );
+  if (val.status && val.status !== existing.status) {
+    const started = "startedAt" in val ? val.startedAt : existing.startedAt;
+    const finished = "finishedAt" in val ? val.finishedAt : existing.finishedAt;
+    if (val.status === "reading" && !started) val.startedAt = v.today();
+    if (val.status === "read" && !finished) val.finishedAt = v.today();
   }
+  const s = "startedAt" in val ? val.startedAt : existing.startedAt;
+  const f = "finishedAt" in val ? val.finishedAt : existing.finishedAt;
+  if (s && f && f < s) return fail("Konec branja ne more biti pred začetkom");
+
+  const [book] = await db
+    .update(books)
+    .set({ ...val, updatedAt: new Date() })
+    .where(and(eq(books.id, id), eq(books.userId, user.userId)))
+    .returning();
+  return NextResponse.json({ book });
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await getSession(request);
-  if (!session) {
-    return NextResponse.json({ error: "Neprijavljen" }, { status: 401 });
-  }
-
+export async function DELETE(request: NextRequest, { params }: Ctx) {
+  const user = await requireUser(request);
+  if (isResponse(user)) return user;
   const { id } = await params;
+  if (!isUuid(id)) return fail("Knjiga ni najdena", 404);
 
-  try {
-    const [book] = await db
-      .delete(books)
-      .where(and(eq(books.id, id), eq(books.userId, session.userId)))
-      .returning();
-
-    if (!book) {
-      return NextResponse.json(
-        { error: "Knjiga ni najdena" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Delete book error:", error);
-    return NextResponse.json(
-      { error: "Napaka pri brisanju knjige" },
-      { status: 500 }
-    );
-  }
+  const [book] = await db.delete(books).where(and(eq(books.id, id), eq(books.userId, user.userId))).returning({ id: books.id });
+  if (!book) return fail("Knjiga ni najdena", 404);
+  return NextResponse.json({ success: true });
 }

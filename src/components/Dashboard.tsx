@@ -1,431 +1,328 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import {
-  BookOpen, Plus, LogOut, Users, BarChart3, Library,
-  Search, Menu, X, Filter, ExternalLink, Save, Trash2
-} from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, ChevronDown, Database, ExternalLink, Library, LogOut, Plus, Search, UserCog, Users, X } from "lucide-react";
+import { apiJson } from "@/lib/api";
+import { STATUS, STATUS_ORDER, type BookStatus } from "@/lib/status";
+import type { BookData, SessionUserInfo } from "@/lib/types";
+import AccountModal from "./AccountModal";
+import AdminPanel from "./AdminPanel";
 import BookCard from "./BookCard";
 import BookModal from "./BookModal";
+import ConfirmDialog from "./ConfirmDialog";
+import DataModal from "./DataModal";
+import Logo from "./Logo";
 import StatsPanel from "./StatsPanel";
-import AdminPanel from "./AdminPanel";
-import ThemeToggle from "./ThemeToggle";
-import ModalPortal from "./ModalPortal";
-
-export interface BookData {
-  id: string;
-  userId: string;
-  googleBooksId: string | null;
-  title: string;
-  author: string;
-  status: "wishlist" | "reading" | "read" | "reserved" | "unavailable" | "cancelled";
-  rating: number | null;
-  color: string;
-  summary: string | null; // Zamenjano iz notes
-  genre: string | null;
-  year: number | null;
-  thumbnail: string | null;
-  description: string | null;
-  isbn: string | null;
-  pageCount: number | null;
-  publisher: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import SummaryModal from "./SummaryModal";
+import ThemePicker from "./ThemePicker";
+import { useToast } from "./Toast";
 
 interface Props {
-  user: { userId: string; username: string; displayName: string; isAdmin: boolean };
+  user: SessionUserInfo;
   onLogout: () => void;
+  onUserChange: (u: SessionUserInfo) => void;
+  emailEnabled: boolean;
 }
 
-type TabType = "books" | "stats" | "admin";
-type FilterStatus = "all" | "wishlist" | "reading" | "read" | "reserved" | "unavailable" | "cancelled";
+type Tab = "books" | "stats" | "admin";
+type Filter = "all" | BookStatus;
+type Sort = "updated" | "added" | "title" | "author" | "rating" | "finished";
 
-export default function Dashboard({ user, onLogout }: Props) {
+const SORTS: { value: Sort; label: string }[] = [
+  { value: "updated", label: "Nazadnje spremenjene" },
+  { value: "added", label: "Nazadnje dodane" },
+  { value: "title", label: "Naslov (A–Ž)" },
+  { value: "author", label: "Avtor (A–Ž)" },
+  { value: "rating", label: "Ocena (najvišja)" },
+  { value: "finished", label: "Datum branja (najnovejše)" },
+];
+
+const collator = new Intl.Collator("sl");
+
+function compare(sort: Sort): (a: BookData, b: BookData) => number {
+  switch (sort) {
+    case "title": return (a, b) => collator.compare(a.title, b.title);
+    case "author": return (a, b) => collator.compare(a.author, b.author) || collator.compare(a.title, b.title);
+    case "rating": return (a, b) => (b.rating ?? 0) - (a.rating ?? 0) || collator.compare(a.title, b.title);
+    case "finished": return (a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "") || b.updatedAt.localeCompare(a.updatedAt);
+    case "added": return (a, b) => b.createdAt.localeCompare(a.createdAt);
+    default: return (a, b) => b.updatedAt.localeCompare(a.updatedAt);
+  }
+}
+
+export default function Dashboard({ user, onLogout, onUserChange, emailEnabled }: Props) {
+  const toast = useToast();
   const [books, setBooks] = useState<BookData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>("books");
-  const [showBookModal, setShowBookModal] = useState(false);
-  const [editingBook, setEditingBook] = useState<BookData | null>(null);
-  
-  // Stanje za modalno okno za urejanje/prikaz povzetka
-  const [summaryModalBook, setSummaryModalBook] = useState<BookData | null>(null);
-  const [summaryText, setSummaryText] = useState("");
-  const [summarySaving, setSummarySaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [tab, setTab] = useState<Tab>("books");
 
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showMobileFilterMenu, setShowMobileFilterMenu] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [genre, setGenre] = useState("");
+  const [sort, setSort] = useState<Sort>("updated");
+  const [query, setQuery] = useState("");
+
+  const [bookModal, setBookModal] = useState<{ book: BookData | null } | null>(null);
+  const [summaryBook, setSummaryBook] = useState<BookData | null>(null);
+  const [deleteBook, setDeleteBook] = useState<BookData | null>(null);
+  const [showAccount, setShowAccount] = useState(false);
+  const [showData, setShowData] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const fetchBooks = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/books");
-      if (res.ok) {
-        const data = await res.json();
-        setBooks(data.books);
-      }
-    } catch (err) {
-      console.error("Fetch books error:", err);
-    } finally {
-      setLoading(false);
-    }
+    const res = await apiJson<{ books: BookData[] }>("/api/books");
+    if (res.ok) { setBooks(res.data.books); setLoadError(""); }
+    else setLoadError(res.error);
+    setLoading(false);
   }, []);
-
   useEffect(() => { fetchBooks(); }, [fetchBooks]);
 
-  function handleEdit(book: BookData) {
-    setEditingBook(book);
-    setShowBookModal(true);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [menuOpen]);
+
+  const upsert = useCallback((book: BookData) => {
+    setBooks((prev) => (prev.some((b) => b.id === book.id) ? prev.map((b) => (b.id === book.id ? book : b)) : [book, ...prev]));
+  }, []);
+
+  async function quickStatus(book: BookData, status: BookStatus) {
+    const res = await apiJson<{ book: BookData }>(`/api/books/${book.id}`, { method: "PUT", body: JSON.stringify({ status }) });
+    if (!res.ok) return toast(res.error, "error");
+    upsert(res.data.book);
+    toast(status === "read" ? "Označeno kot prebrano 🎉" : "Veselo branje!");
   }
 
-  async function handleDelete(bookId: string) {
-    if (!confirm("Ali ste prepričani, da želite izbrisati to knjigo?")) return;
-    try {
-      const res = await apiFetch(`/api/books/${bookId}`, { method: "DELETE" });
-      if (res.ok) setBooks((prev) => prev.filter((b) => b.id !== bookId));
-    } catch (err) { console.error("Delete error:", err); }
+  async function confirmDelete() {
+    if (!deleteBook) return;
+    const res = await apiJson(`/api/books/${deleteBook.id}`, { method: "DELETE" });
+    if (!res.ok) { toast(res.error, "error"); return; }
+    setBooks((prev) => prev.filter((b) => b.id !== deleteBook.id));
+    setDeleteBook(null);
+    toast("Knjiga izbrisana");
   }
 
-  function handleBookSaved() {
-    setShowBookModal(false);
-    setEditingBook(null);
-    fetchBooks();
-  }
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: books.length };
+    for (const b of books) c[b.status] = (c[b.status] || 0) + 1;
+    return c;
+  }, [books]);
 
-  // Odpiranje modalnega okna za povzetek
-  function openSummaryModal(book: BookData) {
-    setSummaryModalBook(book);
-    setSummaryText(book.summary || "");
-  }
+  const genres = useMemo(() => Array.from(new Set(books.map((b) => b.genre).filter((g): g is string => !!g))).sort((a, b) => collator.compare(a, b)), [books]);
 
-  // Shranjevanje ali brisanje povzetka iz dashboard modalnega okna
-  async function handleSaveSummary() {
-    if (!summaryModalBook) return;
-    setSummarySaving(true);
-    try {
-      const res = await apiFetch(`/api/books/${summaryModalBook.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          ...summaryModalBook,
-          summary: summaryText.trim() ? summaryText.trim() : null,
-        }),
-      });
-      if (res.ok) {
-        setSummaryModalBook(null);
-        fetchBooks();
-      }
-    } catch (err) {
-      console.error("Napaka pri shranjevanju povzetka:", err);
-    } finally {
-      setSummarySaving(false);
-    }
-  }
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return books
+      .filter((b) => (filter === "all" || b.status === filter) && (!genre || b.genre === genre)
+        && (!q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)))
+      .sort(compare(sort));
+  }, [books, filter, genre, query, sort]);
 
-  async function handleDeleteSummary() {
-    setSummaryText("");
-  }
+  const tabs: { id: Tab; label: string; icon: typeof Library }[] = [
+    { id: "books", label: "Knjige", icon: Library },
+    { id: "stats", label: "Statistika", icon: BarChart3 },
+    ...(user.isAdmin ? [{ id: "admin" as Tab, label: "Uporabniki", icon: Users }] : []),
+  ];
 
-  const filteredBooks = books.filter((book) => {
-    const matchesStatus = filterStatus === "all" || book.status === filterStatus;
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = 
-      book.title.toLowerCase().includes(query) || 
-      book.author.toLowerCase().includes(query);
-    return matchesStatus && matchesSearch;
-  });
-
-  const statusCounts = {
-    all: books.length,
-    wishlist: books.filter((b) => b.status === "wishlist").length,
-    reading: books.filter((b) => b.status === "reading").length,
-    read: books.filter((b) => b.status === "read").length,
-    reserved: books.filter((b) => b.status === "reserved").length,
-    unavailable: books.filter((b) => b.status === "unavailable").length,
-    cancelled: books.filter((b) => b.status === "cancelled").length,
-  };
-
-  const statusLabels: Record<FilterStatus, string> = {
-    all: "Vse",
-    wishlist: "Želja",
-    reading: "V branju",
-    read: "Prebrane",
-    reserved: "Rezervirane",
-    unavailable: "Ni na voljo",
-    cancelled: "Prenehal(a) z branjem",
-  };
+  const filtersActive = filter !== "all" || genre || query;
 
   return (
-    <div className="min-h-screen bg-surface transition-colors duration-300">
-      <header className="bg-surface-light/80 backdrop-blur-xl border-b border-b-default sticky top-0 z-40 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-brand-600/20 rounded-xl flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-brand-400" />
-              </div>
-              <span className="font-bold text-lg text-t-primary hidden sm:block">Knjigomatik</span>
-            </div>
-            <nav className="hidden md:flex items-center gap-1">
-              <button onClick={() => setActiveTab("books")}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
-                  activeTab === "books" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
-                }`}>
-                <Library className="w-4 h-4" />Knjige
+    <div className="min-h-screen pb-24 md:pb-10">
+      <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Logo size={34} />
+            <span className="heading text-xl font-semibold hidden sm:block">Knjigomatik</span>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-1" aria-label="Glavna navigacija">
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
+                className={`btn min-h-9! ${tab === id ? "bg-sunk text-ink" : "text-muted hover:text-ink hover:bg-sunk/60"}`}>
+                <Icon className="w-4 h-4" />{label}
               </button>
-              <button onClick={() => setActiveTab("stats")}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
-                  activeTab === "stats" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
-                }`}>
-                <BarChart3 className="w-4 h-4" />Statistika
-              </button>
-              {user.isAdmin && (
-                <button onClick={() => setActiveTab("admin")}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition cursor-pointer ${
-                    activeTab === "admin" ? "bg-brand-600/20 text-brand-400" : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
-                  }`}>
-                  <Users className="w-4 h-4" />Uporabniki
-                </button>
-              )}
-              <a 
-                href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-t-muted hover:text-t-primary hover:bg-surface-lighter/50 transition cursor-pointer"
-              >
-                <ExternalLink className="w-4 h-4" />COBISS
-              </a>
-            </nav>
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-accent-500 rounded-full flex items-center justify-center text-sm font-bold text-white">
+            ))}
+            <a href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" target="_blank" rel="noopener noreferrer" className="btn min-h-9! text-muted hover:text-ink hover:bg-sunk/60">
+              <ExternalLink className="w-4 h-4" />COBISS
+            </a>
+          </nav>
+
+          <div className="flex items-center gap-1.5">
+            <ThemePicker />
+            <div className="relative" ref={menuRef}>
+              <button onClick={() => setMenuOpen((o) => !o)} aria-haspopup="menu" aria-expanded={menuOpen}
+                className="btn btn-ghost px-2! py-1! min-h-10! gap-2">
+                <span className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center text-sm heading font-semibold" aria-hidden="true">
                   {user.displayName.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-sm">
-                  <span className="text-t-secondary">{user.displayName}</span>
-                  {user.isAdmin && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-md font-medium">Admin</span>
-                  )}
-                </div>
-              </div>
-              <ThemeToggle />
-              <button onClick={onLogout}
-                className="p-2 text-t-muted hover:text-t-primary hover:bg-surface-lighter/50 rounded-lg transition cursor-pointer" title="Odjava">
-                <LogOut className="w-4 h-4" />
+                </span>
+                <span className="hidden sm:block max-w-[10rem] truncate text-ink">{user.displayName}</span>
+                <ChevronDown className="w-4 h-4 text-muted" />
               </button>
-              <button onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="md:hidden p-2 text-t-muted hover:text-t-primary rounded-lg transition cursor-pointer">
-                <Menu className="w-5 h-5" />
-              </button>
+              {menuOpen && (
+                <div role="menu" className="absolute right-0 mt-2 w-60 card panel-shadow py-1.5 animate-fade-in z-50">
+                  <div className="px-3.5 py-2 border-b border-line mb-1">
+                    <div className="text-sm font-semibold text-ink truncate">{user.displayName}</div>
+                    <div className="text-xs text-muted">@{user.username}{user.isAdmin ? " · skrbnik" : ""}</div>
+                  </div>
+                  <MenuItem icon={UserCog} onClick={() => { setMenuOpen(false); setShowAccount(true); }}>Moj račun in geslo</MenuItem>
+                  <MenuItem icon={Database} onClick={() => { setMenuOpen(false); setShowData(true); }}>Uvoz in izvoz</MenuItem>
+                  <a role="menuitem" href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" target="_blank" rel="noopener noreferrer"
+                    className="md:hidden flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-ink-2 hover:bg-sunk">
+                    <ExternalLink className="w-4 h-4" />COBISS
+                  </a>
+                  <div className="border-t border-line mt-1 pt-1">
+                    <MenuItem icon={LogOut} onClick={onLogout}>Odjava</MenuItem>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          {showMobileMenu && (
-            <div className="md:hidden pb-3 flex gap-1 animate-fade-in border-t border-b-default pt-2">
-              <button onClick={() => { setActiveTab("books"); setShowMobileMenu(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "books" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
-                Knjige
-              </button>
-              <button onClick={() => { setActiveTab("stats"); setShowMobileMenu(false); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "stats" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
-                Statistika
-              </button>
-              {user.isAdmin && (
-                <button onClick={() => { setActiveTab("admin"); setShowMobileMenu(false); }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${activeTab === "admin" ? "bg-brand-600/20 text-brand-400" : "text-t-muted"}`}>
-                  Uporabniki
-                </button>
-              )}
-              <a 
-                href="https://plus.cobiss.net/cobiss/si/sl/search/cobib" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg text-sm font-medium text-t-muted hover:text-t-primary flex items-center gap-2 transition cursor-pointer"
-              >
-                <ExternalLink className="w-4 h-4" />COBISS
-              </a>
-            </div>
-          )}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {activeTab === "books" && (
+        {tab === "books" && (
           <div className="animate-fade-in">
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <div className="flex-1 bg-surface-light border border-b-default rounded-xl px-4 py-2.5 flex items-center gap-2 focus-within:ring-2 focus-within:ring-brand-500 transition">
-                <Search className="w-4 h-4 text-t-faint shrink-0" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Išči po svojih knjigah (naslov ali avtor)..."
-                  className="w-full bg-transparent text-t-primary placeholder-t-faint focus:outline-none text-sm"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="text-t-faint hover:text-t-primary">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+            <div className="flex items-end justify-between gap-4 mb-5">
+              <div>
+                <h1 className="heading text-3xl font-semibold">Moja polica</h1>
+                <p className="text-sm text-muted mt-1">
+                  {books.length === 0 ? "Začnite z dodajanjem prve knjige." : `${books.length} ${books.length === 1 ? "knjiga" : "knjig"}, ${counts.reading || 0} v branju`}
+                </p>
               </div>
-              <button onClick={() => { setEditingBook(null); setShowBookModal(true); }}
-                className="bg-brand-600 hover:bg-brand-500 text-white font-medium px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition whitespace-nowrap cursor-pointer">
-                <Plus className="w-4 h-4" />Dodaj knjigo ročno
+              <button className="btn btn-primary hidden sm:inline-flex" onClick={() => setBookModal({ book: null })}>
+                <Plus className="w-4 h-4" />Dodaj knjigo
               </button>
             </div>
 
-            <div className="mb-6">
-              <div className="sm:hidden flex items-center justify-between mb-2">
-                <button
-                  onClick={() => setShowMobileFilterMenu(!showMobileFilterMenu)}
-                  className="w-full bg-surface-light border border-b-default px-4 py-2.5 rounded-xl text-sm font-medium text-t-primary flex items-center justify-between transition"
-                >
-                  <span className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-brand-400" />
-                    Filter: <strong className="text-brand-400">{statusLabels[filterStatus]}</strong> ({statusCounts[filterStatus]})
-                  </span>
-                  <Menu className="w-4 h-4 text-t-muted" />
-                </button>
+            <div className="flex flex-col lg:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-faint absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input type="search" className="input pl-10! pr-10!" value={query} onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Išči po naslovu ali avtorju …" aria-label="Iskanje po knjigah" />
+                {query && (
+                  <button onClick={() => setQuery("")} className="btn btn-icon absolute right-1 top-1/2 -translate-y-1/2" aria-label="Počisti iskanje"><X className="w-4 h-4" /></button>
+                )}
               </div>
+              <div className="flex gap-3">
+                {genres.length > 0 && (
+                  <select className="input lg:w-48" value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Filter po žanru">
+                    <option value="">Vsi žanri</option>
+                    {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                )}
+                <select className="input lg:w-56" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Razvrščanje">
+                  {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            </div>
 
-              {showMobileFilterMenu && (
-                <div className="sm:hidden bg-surface-light border border-b-default rounded-xl p-2 mb-3 space-y-1 animate-fade-in shadow-lg">
-                  {(Object.keys(statusLabels) as FilterStatus[]).map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => {
-                        setFilterStatus(status);
-                        setShowMobileFilterMenu(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-between transition ${
-                        filterStatus === status
-                          ? "bg-brand-600 text-white"
-                          : "text-t-muted hover:text-t-primary hover:bg-surface-lighter/50"
-                      }`}
-                    >
-                      <span>{statusLabels[status]}</span>
-                      <span className="opacity-80 px-2 py-0.5 rounded-full text-xs bg-black/10">
-                        {statusCounts[status]}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="hidden sm:flex gap-2 overflow-x-auto pb-1">
-                {(Object.keys(statusLabels) as FilterStatus[]).map((status) => (
-                  <button key={status} onClick={() => setFilterStatus(status)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition cursor-pointer ${
-                      filterStatus === status
-                        ? "bg-brand-600 text-white"
-                        : "bg-surface-light text-t-muted hover:text-t-primary border border-b-default"
-                    }`}>
-                    {statusLabels[status]}
-                    <span className="ml-1.5 opacity-60">{statusCounts[status]}</span>
+            <div className="scroll-x -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
+              <div className="flex gap-2 w-max sm:w-auto sm:flex-wrap" role="group" aria-label="Filter po statusu">
+                <button className="chip" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>Vse <span className="count">{counts.all}</span></button>
+                {STATUS_ORDER.filter((s) => (counts[s] || 0) > 0 || filter === s).map((s) => (
+                  <button key={s} className="chip" aria-pressed={filter === s} onClick={() => setFilter(s)}>
+                    {STATUS[s].short} <span className="count">{counts[s] || 0}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+              <div className="py-24 flex justify-center"><div className="w-9 h-9 border-[3px] border-brand border-t-transparent rounded-full animate-spin" role="status" aria-label="Nalagam" /></div>
+            ) : loadError ? (
+              <div className="alert alert-error flex items-center justify-between gap-3">
+                <span>{loadError}</span>
+                <button className="btn btn-ghost min-h-8!" onClick={fetchBooks}>Poskusi znova</button>
               </div>
-            ) : filteredBooks.length === 0 ? (
-              <div className="text-center py-20">
-                <div className="w-16 h-16 bg-surface-light rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="w-8 h-8 text-t-faint" />
+            ) : visible.length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="flex items-end justify-center gap-1.5 h-20 mb-2" aria-hidden="true">
+                  {[44, 64, 52, 72, 48, 60].map((h, i) => (
+                    <div key={i} className="w-5 rounded-t-sm" style={{ height: h, background: ["var(--brand)", "var(--brass)", "var(--sky)", "var(--moss)", "var(--plum)", "var(--rust)"][i], opacity: 0.85 }} />
+                  ))}
                 </div>
-                <p className="text-t-muted text-lg mb-2">
-                  {books.length === 0 ? "Nimate še dodanih knjig" : "Ni najdenih knjig"}
+                <div className="shelf-rule max-w-xs mx-auto mb-6" />
+                <p className="heading text-xl text-ink mb-1">{books.length === 0 ? "Polica je še prazna" : "Nič ni najdenega"}</p>
+                <p className="text-sm text-muted mb-5">
+                  {books.length === 0 ? "Dodajte prvo knjigo ročno ali z vnosom ISBN." : "Poskusite z drugim iskanjem ali filtrom."}
                 </p>
-                <p className="text-t-faint text-sm">
-                  {books.length === 0 ? "Kliknite na »Dodaj knjigo ročno« za začetek" : "Poskusite z drugim iskalnim nizom ali filtrom"}
-                </p>
+                {books.length === 0 ? (
+                  <button className="btn btn-primary" onClick={() => setBookModal({ book: null })}><Plus className="w-4 h-4" />Dodaj knjigo</button>
+                ) : filtersActive ? (
+                  <button className="btn btn-ghost" onClick={() => { setFilter("all"); setGenre(""); setQuery(""); }}>Počisti filtre</button>
+                ) : null}
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredBooks.map((book, i) => (
-                  <div key={book.id} className="animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
-                    <BookCard 
-                      book={book} 
-                      onEdit={() => handleEdit(book)} 
-                      onDelete={() => handleDelete(book.id)} 
-                      onOpenSummary={() => openSummaryModal(book)}
-                    />
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {visible.map((book) => (
+                  <BookCard key={book.id} book={book}
+                    onEdit={() => setBookModal({ book })}
+                    onDelete={() => setDeleteBook(book)}
+                    onOpenSummary={() => setSummaryBook(book)}
+                    onStatus={(s) => quickStatus(book, s)} />
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {activeTab === "stats" && <StatsPanel />}
-        {activeTab === "admin" && user.isAdmin && <AdminPanel />}
+        {tab === "stats" && (
+          <div>
+            <h1 className="heading text-3xl font-semibold mb-5">Statistika</h1>
+            {loading ? <div className="py-20 text-center text-muted">Nalagam …</div> : <StatsPanel books={books} />}
+          </div>
+        )}
+        {tab === "admin" && user.isAdmin && <AdminPanel currentUser={user} emailEnabled={emailEnabled} />}
       </main>
 
-      {/* Modal za urejanje knjige */}
-      {showBookModal && (
-        <BookModal book={editingBook}
-          onClose={() => { setShowBookModal(false); setEditingBook(null); }}
-          onSaved={handleBookSaved} />
+      {/* Plavajoči gumb za dodajanje na telefonu */}
+      {tab === "books" && (
+        <button onClick={() => setBookModal({ book: null })} aria-label="Dodaj knjigo"
+          className="sm:hidden fixed right-4 bottom-20 z-30 w-14 h-14 rounded-full bg-brand text-white shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition">
+          <Plus className="w-6 h-6" />
+        </button>
       )}
 
-      {/* Modalno okno za prikaz in urejanje povzetka */}
-      {summaryModalBook && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-backdrop backdrop-blur-sm" onClick={() => setSummaryModalBook(null)} />
-          <div className="min-h-full flex items-center justify-center p-2 sm:p-4">
-            <div className="relative bg-surface-light border border-b-default rounded-2xl w-[95vw] max-w-4xl h-[90vh] shadow-2xl animate-slide-up p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                <div>
-                  <h3 className="text-xl font-bold text-t-primary">Povzetek knjige</h3>
-                  <p className="text-sm text-t-muted">{summaryModalBook.title} – {summaryModalBook.author}</p>
-                </div>
-                <button onClick={() => setSummaryModalBook(null)} className="p-2 hover:bg-surface-lighter rounded-lg transition cursor-pointer">
-                  <X className="w-5 h-5 text-t-muted" />
-                </button>
-              </div>
+      {/* Spodnja navigacija (telefon) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-line bg-paper/95 backdrop-blur-md bottom-nav" aria-label="Glavna navigacija">
+        <div className="flex">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold cursor-pointer ${tab === id ? "text-brand-text" : "text-muted"}`}>
+              <Icon className="w-5 h-5" />{label}
+            </button>
+          ))}
+        </div>
+      </nav>
 
-              <div className="space-y-4 flex-1 flex flex-col min-h-0">
-                <textarea
-                  value={summaryText}
-                  onChange={(e) => setSummaryText(e.target.value)}
-                  placeholder="Napišite ali uredite povzetek knjige..."
-                  className="w-full flex-1 bg-surface border border-b-default rounded-lg px-4 py-3 text-t-primary placeholder-t-faint focus:outline-none focus:ring-2 focus:ring-brand-500 transition resize-none text-base"
-                />
-
-                <div className="flex items-center justify-between gap-2 shrink-0 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleDeleteSummary}
-                    className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" /> Izbriši povzetek
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSummaryModalBook(null)}
-                      className="px-4 py-2.5 bg-surface-lighter hover:bg-surface-lighter/80 text-t-muted rounded-lg text-sm font-medium transition cursor-pointer"
-                    >
-                      Prekliči
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveSummary}
-                      disabled={summarySaving}
-                      className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Save className="w-4 h-4" /> {summarySaving ? "Shranjujem..." : "Shrani povzetek"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ModalPortal>
+      {bookModal && (
+        <BookModal book={bookModal.book} onClose={() => setBookModal(null)}
+          onSaved={(b, isNew) => { upsert(b); setBookModal(null); toast(isNew ? "Knjiga dodana" : "Spremembe shranjene"); }} />
       )}
+      {summaryBook && (
+        <SummaryModal book={summaryBook} onClose={() => setSummaryBook(null)}
+          onSaved={(b) => { upsert(b); setSummaryBook(null); toast("Povzetek shranjen"); }} />
+      )}
+      {deleteBook && (
+        <ConfirmDialog title="Izbris knjige" message={`Knjiga »${deleteBook.title}« bo trajno izbrisana.`} confirmLabel="Izbriši" danger
+          onCancel={() => setDeleteBook(null)} onConfirm={confirmDelete} />
+      )}
+      {showAccount && <AccountModal user={user} emailEnabled={emailEnabled} onClose={() => setShowAccount(false)} onUserChange={onUserChange} />}
+      {showData && <DataModal bookCount={books.length} onClose={() => setShowData(false)} onImported={fetchBooks} />}
     </div>
+  );
+}
+
+function MenuItem({ icon: Icon, onClick, children }: { icon: typeof Library; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button role="menuitem" onClick={onClick} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-ink-2 hover:bg-sunk text-left cursor-pointer">
+      <Icon className="w-4 h-4" />{children}
+    </button>
   );
 }

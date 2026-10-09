@@ -1,22 +1,23 @@
 {
-  "name": "nextjs-postgresql-template",
+  "name": "knjigomatik",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate": "node scripts/migrate.mjs",
+    "reset-password": "node scripts/reset-password.mjs"
   },
   "dependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "bcryptjs": "^3.0.3",
-    "cheerio": "^1.0.0",
-    "dotenv": "17.3.1",
-    "drizzle-orm": "0.45.2",
     "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "0.45.2",
     "jose": "^6.2.8",
     "lucide-react": "^1.31.0",
+    "nodemailer": "^7.0.0",
     "next": "16.2.6",
     "pg": "8.20.0",
     "react": "19.2.6",
@@ -25,10 +26,10 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",
     "@types/node": "22.19.15",
+    "@types/nodemailer": "^6.4.17",
     "@types/pg": "8.18.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "postcss": "8.5.8",

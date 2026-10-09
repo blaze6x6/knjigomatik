@@ -1,36 +1,23 @@
 #!/bin/sh
 set -e
 
-DB_URL="${DATABASE_URL:-postgresql://postgres:postgres@db:5432/knjigomatik}"
+echo "🚀 Knjigomatik se zaganja ..."
 
-# Parse DATABASE_URL -> host, port, user, dbname
-rest="${DB_URL#*://}"
-creds="${rest%%@*}"
-DB_USER="${creds%%:*}"
-hostpart="${rest#*@}"
-hostdb="${hostpart%%\?*}"
-hostport="${hostdb%%/*}"
-DB_NAME="${hostdb#*/}"
-DB_HOST="${hostport%%:*}"
-DB_PORT="${hostport#*:}"
-[ "$DB_PORT" = "$hostport" ] && DB_PORT=5432
+# JWT_SECRET je obvezen in ne sme biti privzeta vrednost iz starih različic
+case "${JWT_SECRET:-}" in
+  ""|changeme|spremenite-ta-skrivni-kljuc-v-produkciji-2024|default-secret-change-in-production-knjigomatik-2024)
+    echo "❌ JWT_SECRET ni nastavljen (ali je privzet). Ustvarite ga z: openssl rand -hex 32"
+    echo "   in ga vpišite v datoteko .env (glejte .env.example)."
+    exit 1
+    ;;
+esac
+if [ "${#JWT_SECRET}" -lt 16 ]; then
+  echo "❌ JWT_SECRET je prekratek (najmanj 16 znakov, priporočeno 64)."
+  exit 1
+fi
 
-echo "🚀 Starting Knjigomatik..."
-echo "📦 Waiting for database at ${DB_HOST}:${DB_PORT} ..."
+# Migracije baze; počaka na bazo, ob napaki se zagon prekine
+node scripts/migrate.mjs
 
-i=0
-until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; do
-  i=$((i+1))
-  if [ "$i" -ge 30 ]; then
-    echo "❌ Database not reachable after 60s — starting anyway."
-    break
-  fi
-  echo "⏳ Waiting for database... ($i/30)"
-  sleep 2
-done
-
-echo "🔄 Synchronizing database schema with Drizzle..."
-npx drizzle-kit push || true
-
-echo "✅ Starting application on port ${PORT:-3000}"
+echo "✅ Zaganjam aplikacijo na portu ${PORT:-3000}"
 exec "$@"

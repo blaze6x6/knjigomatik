@@ -2,63 +2,37 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import { ToastProvider } from "@/components/Toast";
+import { DEFAULT_DARK, DEFAULT_LIGHT, THEMES, THEME_STORAGE_KEY } from "@/lib/themes";
 
 export const metadata: Metadata = {
-  title: "Knjigomatik — Vaša knjižna polica",
-  description: "Moderna spletna aplikacija za upravljanje vaše knjižne zbirke",
+  title: "Knjigomatik",
+  description: "Vaša osebna knjižna polica: kaj berete, kaj ste prebrali in kaj še čaka.",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Knjigomatik",
-  },
-  formatDetection: {
-    telephone: false,
-  },
+  icons: { icon: "/favicon.svg", apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Knjigomatik" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
-    { media: "(prefers-color-scheme: light)", color: "#f1f5f9" },
-  ],
   viewportFit: "cover",
 };
 
+// Tema se nastavi pred prvim izrisom, da ne utripa. Podatke (ID-ji, barve) vzame iz seznama tem.
+const themeScript = `(function(){try{var T=${JSON.stringify(Object.fromEntries(THEMES.map((t) => [t.id, [t.mode, t.paper]])))};var s=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(s==='light')s=${JSON.stringify(DEFAULT_LIGHT)};if(s==='dark')s=${JSON.stringify(DEFAULT_DARK)};if(!s||!T[s]){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?${JSON.stringify(DEFAULT_DARK)}:${JSON.stringify(DEFAULT_LIGHT)}}var r=document.documentElement;r.dataset.theme=s;r.style.colorScheme=T[s][0];var m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement('meta');m.name='theme-color';document.head.appendChild(m)}m.content=T[s][1]}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="sl" className="dark" suppressHydrationWarning>
+    <html lang="sl" suppressHydrationWarning>
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function(){
-                try {
-                  var t = localStorage.getItem('knjigomatik-theme');
-                  var root = document.documentElement;
-                  if (t === 'light') {
-                    root.classList.remove('dark');
-                    root.classList.add('light');
-                  }
-                  // Update theme-color meta to match
-                  var meta = document.querySelector('meta[name="theme-color"]');
-                  if (meta) meta.setAttribute('content', t === 'light' ? '#f1f5f9' : '#0f172a');
-                } catch(e){}
-              })();
-            `,
-          }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="bg-surface text-t-primary antialiased min-h-screen transition-colors duration-300">
-        <ThemeProvider>{children}</ThemeProvider>
+      <body className="min-h-screen antialiased">
+        <ThemeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

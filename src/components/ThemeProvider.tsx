@@ -1,78 +1,74 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { DEFAULT_DARK, DEFAULT_LIGHT, THEMES, THEME_STORAGE_KEY } from "@/lib/themes";
 
-type Theme = "dark" | "light";
+/** "auto" = sledi nastavitvi sistema (svetla/temna), sicer ID izbrane teme. */
+export type ThemeSetting = "auto" | string;
 
-interface ThemeContextType {
-  theme: Theme;
-  toggleTheme: () => void;
+interface Ctx {
+  setting: ThemeSetting;
+  /** ID teme, ki se dejansko uporablja */
+  active: string;
+  setSetting: (s: ThemeSetting) => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({
-  theme: "dark",
-  toggleTheme: () => {},
-});
+const ThemeContext = createContext<Ctx>({ setting: "auto", active: DEFAULT_LIGHT, setSetting: () => {} });
+export const useTheme = () => useContext(ThemeContext);
 
-export function useTheme() {
-  return useContext(ThemeContext);
+const ids = new Set(THEMES.map((t) => t.id));
+const systemDark = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+
+function resolve(setting: ThemeSetting, dark: boolean): string {
+  if (ids.has(setting)) return setting;
+  return dark ? DEFAULT_DARK : DEFAULT_LIGHT;
 }
 
-const THEME_COLORS: Record<Theme, string> = {
-  dark: "#0f172a",
-  light: "#f1f5f9",
-};
+function apply(id: string) {
+  const root = document.documentElement;
+  root.dataset.theme = id;
+  const t = THEMES.find((x) => x.id === id);
+  if (!t) return;
+  root.style.colorScheme = t.mode;
+  // barva vrstice brskalnika na telefonu
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "theme-color";
+    document.head.appendChild(meta);
+  }
+  meta.content = t.paper;
+}
 
 export default function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+  const [setting, setSettingState] = useState<ThemeSetting>("auto");
+  const [dark, setDark] = useState(false);
 
+  // začetno stanje beremo po hidraciji (pred prvim izrisom je že nastavljeno z zagonskim skriptom)
   useEffect(() => {
-    const saved = localStorage.getItem("knjigomatik-theme") as Theme | null;
-    if (saved === "light" || saved === "dark") {
-      setTheme(saved);
-      applyTheme(saved);
-    }
-    setMounted(true);
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch { /* zasebni način */ }
+    if (saved === "light") saved = DEFAULT_LIGHT; // vrednosti iz starejših različic
+    if (saved === "dark") saved = DEFAULT_DARK;
+    setSettingState(saved && ids.has(saved) ? saved : "auto");
+    setDark(systemDark());
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => setDark(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  function applyTheme(t: Theme) {
-    const root = document.documentElement;
-    if (t === "light") {
-      root.classList.add("light");
-      root.classList.remove("dark");
-    } else {
-      root.classList.add("dark");
-      root.classList.remove("light");
-    }
-    // Update mobile browser chrome color
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) {
-      meta.setAttribute("content", THEME_COLORS[t]);
-    }
-  }
+  const active = resolve(setting, dark);
+  useEffect(() => { apply(active); }, [active]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
-      localStorage.setItem("knjigomatik-theme", next);
-      applyTheme(next);
-      return next;
-    });
+  const setSetting = useCallback((s: ThemeSetting) => {
+    setSettingState(s);
+    try {
+      if (s === "auto") localStorage.removeItem(THEME_STORAGE_KEY);
+      else localStorage.setItem(THEME_STORAGE_KEY, s);
+    } catch { /* zasebni način */ }
   }, []);
 
-  if (!mounted) return null;
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  const value = useMemo(() => ({ setting, active, setSetting }), [setting, active, setSetting]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

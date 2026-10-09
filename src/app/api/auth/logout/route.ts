@@ -1,5 +1,6 @@
+import { NextRequest } from "next/server";
 import { clearSessionResponse } from "@/lib/auth";
 
-export async function POST() {
-  return clearSessionResponse();
+export async function POST(request: NextRequest) {
+  return clearSessionResponse(request);
 }

@@ -1,100 +1,110 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
+import crypto from "node:crypto";
 import { sql } from "drizzle-orm";
-import bcrypt from "bcryptjs";
-import { getSession } from "@/lib/auth";
+import { db } from "@/db";
+import { passwordResets, users } from "@/db/schema";
+import { hashPassword, isResponse, requireAdmin } from "@/lib/auth";
+import { fail, pgCode, pgConstraint, readJson } from "@/lib/http";
+import { emailEnabled, sendResetEmail } from "@/lib/mail";
+import { RESET_TTL_MS, hashResetToken, newResetToken } from "@/lib/reset-token";
+import * as v from "@/lib/validate";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const session = await getSession(request);
-  if (!session?.isAdmin) {
-    return NextResponse.json({ error: "Nimate pravic" }, { status: 403 });
-  }
+  const admin = await requireAdmin(request);
+  if (isResponse(admin)) return admin;
 
-  const allUsers = await db
+  const list = await db
     .select({
       id: users.id,
       username: users.username,
       displayName: users.displayName,
+      email: users.email,
       isAdmin: users.isAdmin,
+      disabled: users.disabled,
+      lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
       bookCount: sql<number>`(SELECT count(*)::int FROM books WHERE books.user_id = ${users.id})`,
     })
     .from(users)
     .orderBy(users.createdAt);
-
-  return NextResponse.json({ users: allUsers });
+  return NextResponse.json({ users: list });
 }
 
+/**
+ * Ustvari uporabnika. Če geslo ni podano, se ustvari povabilo:
+ * odgovor vsebuje žeton, iz katerega skrbnik sestavi povezavo za nastavitev gesla.
+ */
 export async function POST(request: NextRequest) {
-  const session = await getSession(request);
-  if (!session?.isAdmin) {
-    return NextResponse.json({ error: "Nimate pravic" }, { status: 403 });
-  }
+  const admin = await requireAdmin(request);
+  if (isResponse(admin)) return admin;
+
+  const body = await readJson(request);
+  if (!body) return fail("Neveljavna zahteva");
+  const u = v.username(body.username);
+  const d = v.displayName(body.displayName);
+  const em = v.email(body.email);
+  const invite = body.password === undefined || body.password === null || body.password === "";
+  const p: { value?: string; error?: string } = invite ? { value: crypto.randomBytes(24).toString("base64url") } : v.password(body.password);
+  const err = u.error || d.error || em.error || p.error;
+  const wantMail = body.sendEmail === true && !!em.value && invite;
+  if (wantMail && !emailEnabled()) return fail("Pošiljanje e-pošte ni nastavljeno (SMTP_* in APP_URL)");
+  if (err) return fail(err);
 
   try {
-    const body = await request.json();
-    const { username, displayName, password, isAdmin } = body;
-
-    if (!username || !displayName || !password) {
-      return NextResponse.json(
-        { error: "Vsa polja so obvezna" },
-        { status: 400 }
-      );
+    const result = await db.transaction(async (tx) => {
+      const [user] = await tx
+        .insert(users)
+        .values({
+          username: u.value!,
+          displayName: d.value!,
+          email: em.value,
+          passwordHash: await hashPassword(p.value!),
+          isAdmin: body.isAdmin === true,
+        })
+        .returning({
+          id: users.id,
+          username: users.username,
+          displayName: users.displayName,
+          email: users.email,
+          isAdmin: users.isAdmin,
+          disabled: users.disabled,
+          lastLoginAt: users.lastLoginAt,
+          createdAt: users.createdAt,
+        });
+      let token: string | undefined;
+      if (invite) {
+        const t = newResetToken();
+        token = t;
+        await tx.insert(passwordResets).values({
+          userId: user.id,
+          tokenHash: hashResetToken(t),
+          expiresAt: new Date(Date.now() + RESET_TTL_MS),
+          createdBy: admin.userId,
+        });
+      }
+      return { user: { ...user, bookCount: 0 }, token };
+    });
+    let emailSent: boolean | undefined;
+    let emailError: string | undefined;
+    if (wantMail && result.token) {
+      try {
+        await sendResetEmail({ to: em.value!, name: result.user.displayName, username: result.user.username, token: result.token, hours: RESET_TTL_MS / 3600000, kind: "invite" });
+        emailSent = true;
+      } catch (e) {
+        console.error("Invite email error:", e);
+        emailSent = false;
+        emailError = (e as Error).message;
+      }
     }
-
-    if (username.length < 3) {
-      return NextResponse.json(
-        { error: "Uporabniško ime mora imeti vsaj 3 znake" },
-        { status: 400 }
-      );
-    }
-
-    if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
-      return NextResponse.json(
-        { error: "Uporabniško ime lahko vsebuje le črke, številke, pike, pomišljaje in podčrtaje" },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: "Geslo mora imeti vsaj 6 znakov" },
-        { status: 400 }
-      );
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        username: username.toLowerCase().trim(),
-        displayName: displayName.trim(),
-        passwordHash,
-        isAdmin: isAdmin || false,
-      })
-      .returning({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        isAdmin: users.isAdmin,
-        createdAt: users.createdAt,
-      });
-
-    return NextResponse.json({ user }, { status: 201 });
-  } catch (error: unknown) {
-    const pgError = error as { code?: string };
-    if (pgError.code === "23505") {
-      return NextResponse.json(
-        { error: "Uporabniško ime je že zasedeno" },
-        { status: 409 }
-      );
-    }
-    console.error("Create user error:", error);
     return NextResponse.json(
-      { error: "Napaka pri dodajanju uporabnika" },
-      { status: 500 }
+      { user: result.user, resetToken: result.token, expiresInHours: result.token ? RESET_TTL_MS / 3600000 : undefined, emailSent, emailError },
+      { status: 201 }
     );
+  } catch (e) {
+    if (pgCode(e) === "23505") return fail(pgConstraint(e).includes("email") ? "Ta e-naslov že uporablja drug račun" : "Uporabniško ime je že zasedeno", 409);
+    console.error("Create user error:", e);
+    return fail("Napaka pri dodajanju uporabnika", 500);
   }
 }

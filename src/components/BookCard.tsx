@@ -1,115 +1,96 @@
 "use client";
 
-import { Edit3, Trash2, Star, BookOpen, FileText } from "lucide-react";
-import type { BookData } from "./Dashboard";
+import { BookCheck, BookOpen, ExternalLink, FileText, Pencil, Star, Trash2 } from "lucide-react";
+import { STATUS, type BookStatus } from "@/lib/status";
+import type { BookData } from "@/lib/types";
+import BookCover from "./BookCover";
 
 interface Props {
   book: BookData;
   onEdit: () => void;
   onDelete: () => void;
   onOpenSummary: () => void;
+  onStatus: (status: BookStatus) => void;
 }
 
-const statusConfig: Record<string, { label: string; className: string; emoji: string }> = {
-  wishlist: { label: "Želja", className: "bg-purple-500/20 text-purple-400 border-purple-500/30", emoji: "💫" },
-  reading: { label: "V branju", className: "bg-blue-500/20 text-blue-400 border-blue-500/30", emoji: "📖" },
-  read: { label: "Prebrana", className: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30", emoji: "✅" },
-  reserved: { label: "Rezervirana", className: "bg-amber-500/20 text-amber-500 border-amber-500/30", emoji: "📌" },
-  unavailable: { label: "Ni na voljo", className: "bg-red-500/20 text-red-400 border-red-500/30", emoji: "❌" },
-  cancelled: { label: "Prenehal(a) z branjem", className: "bg-gray-500/20 text-gray-400 border-gray-500/30", emoji: "🚫" },
+const TONE_VAR: Record<string, string> = {
+  plum: "var(--plum)", sky: "var(--sky)", moss: "var(--moss)", brass: "var(--brass)", rust: "var(--rust)", stone: "var(--stone)",
 };
 
-export default function BookCard({ book, onEdit, onDelete, onOpenSummary }: Props) {
-  const status = statusConfig[book.status] || statusConfig.wishlist;
+const fmtDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("sl-SI", { day: "numeric", month: "numeric", year: "numeric" });
 
-  // Pomožna funkcija za varno krajšanje dolgega besedila povzetka
-  const getShortSummary = (text: string | null, maxLength = 40) => {
-    if (!text) return "";
-    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
-  };
+export default function BookCard({ book, onEdit, onDelete, onOpenSummary, onStatus }: Props) {
+  const st = STATUS[book.status] ?? STATUS.wishlist;
+  const customColor = book.color && book.color.toLowerCase() !== "#ffffff" ? book.color : null;
+  const spine = customColor ?? TONE_VAR[st.tone];
+  const cobiss = book.description?.startsWith("https://plus.cobiss.net/") ? book.description : null;
+
+  const meta = [book.year, book.genre, book.pageCount ? `${book.pageCount} str.` : null].filter(Boolean).join(" · ");
+  const dates =
+    book.status === "read" && book.finishedAt ? `Prebrana ${fmtDate(book.finishedAt)}`
+    : book.status === "reading" && book.startedAt ? `Začeta ${fmtDate(book.startedAt)}`
+    : null;
 
   return (
-    <div className="group bg-card border border-b-default rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 hover:border-brand-500/30 flex flex-col justify-between w-full max-w-full">
-      <div className="flex gap-3 p-4 min-w-0">
-        {/* Thumbnail */}
-        <div className="w-20 h-28 bg-surface-lighter rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
-          {book.thumbnail ? (
-            <img src={book.thumbnail} alt={book.title} className="w-full h-full object-cover" />
-          ) : (
-            <BookOpen className="w-8 h-8 text-t-faint" />
-          )}
-        </div>
+    <article className="card book-card group flex flex-col h-full" style={{ "--spine": spine } as React.CSSProperties}>
+      <div className="book-spine" aria-hidden="true" />
+      <div className="flex gap-3.5 p-4 pl-5 min-w-0 flex-1">
+        <BookCover title={book.title} author={book.author} thumbnail={book.thumbnail} color={book.color} />
 
-        {/* Content */}
         <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-t-primary leading-tight line-clamp-2 break-words" title={book.title}>
-                {book.title}
-              </h3>
-              <p className="text-sm text-t-muted truncate mt-0.5">{book.author}</p>
+          <div className="flex items-start justify-between gap-1">
+            <div className="min-w-0">
+              <h3 className="heading font-semibold text-ink leading-snug line-clamp-2 break-words" title={book.title}>{book.title}</h3>
+              <p className="text-sm text-muted truncate mt-0.5">{book.author}</p>
             </div>
-
-            <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-              <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-surface-lighter transition cursor-pointer" title="Uredi">
-                <Edit3 className="w-4 h-4 text-t-muted" />
-              </button>
-              <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-500/20 transition cursor-pointer" title="Izbriši">
-                <Trash2 className="w-4 h-4 text-red-400" />
-              </button>
+            <div className="flex shrink-0 -mr-1.5 -mt-1 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
+              <button onClick={onEdit} className="btn btn-icon" title="Uredi" aria-label={`Uredi: ${book.title}`}><Pencil className="w-4 h-4" /></button>
+              <button onClick={onDelete} className="btn btn-icon hover:text-rust!" title="Izbriši" aria-label={`Izbriši: ${book.title}`}><Trash2 className="w-4 h-4" /></button>
             </div>
           </div>
 
-          {/* Status */}
-          <div className="mt-2">
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${status.className}`}>
-              <span>{status.emoji}</span>
-              {status.label}
-            </span>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+            <span className={`badge tone-${st.tone}`}>{st.label}</span>
+            {book.rating !== null && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-brass" title={`Ocena ${book.rating} od 10`}>
+                <Star className="w-3.5 h-3.5 fill-current" />{book.rating}/10
+              </span>
+            )}
           </div>
 
-          {/* Rating */}
-          {book.rating !== null && (
-            <div className="flex items-center gap-1 mt-2">
-              <div className="flex gap-0.5 overflow-hidden">
-                {Array.from({ length: 10 }, (_, i) => (
-                  <Star key={i} className={`w-3 h-3 shrink-0 ${i < book.rating! ? "fill-amber-400 text-amber-400" : "text-t-faint/30"}`} />
-                ))}
-              </div>
-              <span className="text-xs text-t-muted ml-1 shrink-0">{book.rating}/10</span>
-            </div>
-          )}
-
-          {/* Meta */}
-          <div className="flex flex-wrap gap-1 mt-auto pt-2 text-xs text-t-faint">
-            {book.year && <span>{book.year}</span>}
-            {book.genre && <span>• {book.genre}</span>}
-            {book.pageCount && <span>• {book.pageCount} str.</span>}
+          <div className="mt-auto pt-2 text-xs text-faint space-y-0.5">
+            {dates && <div className="text-muted">{dates}</div>}
+            {meta && <div className="truncate">{meta}</div>}
           </div>
         </div>
       </div>
 
-      {/* Summary Footer / Button - z vgrajenim krajšanjem in preprečevanjem izliva */}
-      <div className="px-4 py-2.5 bg-surface-lighter/40 border-t border-b-light flex items-center justify-between gap-2 min-w-0">
-        {book.summary ? (
-          <button 
-            onClick={onOpenSummary}
-            className="text-xs text-t-muted hover:text-brand-400 transition flex items-center gap-1.5 text-left min-w-0 flex-1 overflow-hidden"
-            title="Klikni za ogled celotnega povzetka"
-          >
-            <FileText className="w-3.5 h-3.5 shrink-0 text-brand-400" />
-            <span className="truncate italic">&ldquo;{getShortSummary(book.summary)}&rdquo;</span>
-          </button>
-        ) : (
-          <span className="text-xs text-t-faint italic truncate flex-1">Brez povzetka</span>
-        )}
-        <button 
+      <div className="px-4 pl-5 py-2 border-t border-line bg-sunk/50 flex items-center gap-2 min-h-[44px]">
+        <button
           onClick={onOpenSummary}
-          className="text-xs font-medium text-brand-400 hover:underline shrink-0 cursor-pointer whitespace-nowrap ml-auto"
+          className="flex-1 min-w-0 flex items-center gap-1.5 text-left text-xs text-muted hover:text-brand-text cursor-pointer"
+          title={book.summary ? "Odpri povzetek" : "Dodaj povzetek"}
         >
-          {book.summary ? "Uredi" : "+ Povzetek"}
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+          <span className={`truncate ${book.summary ? "italic" : ""}`}>{book.summary ? book.summary : "Dodaj povzetek"}</span>
         </button>
+
+        {cobiss && (
+          <a href={cobiss} target="_blank" rel="noopener noreferrer" className="btn btn-icon min-h-8! min-w-8!" title="Odpri v COBISS" aria-label="Odpri v COBISS">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+        {(book.status === "wishlist" || book.status === "reserved") && (
+          <button onClick={() => onStatus("reading")} className="btn btn-ghost min-h-8! px-2.5! py-1! text-xs! shrink-0">
+            <BookOpen className="w-3.5 h-3.5" />Začni brati
+          </button>
+        )}
+        {book.status === "reading" && (
+          <button onClick={() => onStatus("read")} className="btn btn-ghost min-h-8! px-2.5! py-1! text-xs! shrink-0">
+            <BookCheck className="w-3.5 h-3.5" />Prebrano
+          </button>
+        )}
       </div>
-    </div>
+    </article>
   );
 }

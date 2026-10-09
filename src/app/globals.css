@@ -1,138 +1,208 @@
 @import "tailwindcss";
+@import "./themes.css";
 
+/* Knjižna tema: topel papir (svetla) in črnilo/usnje (temna) */
 @theme {
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
+  --font-serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
 
-  --color-accent-400: #a78bfa;
-  --color-accent-500: #8b5cf6;
-  --color-accent-600: #7c3aed;
-
-  /* Theme-aware surface colors (dark defaults, overridden by .light) */
-  --color-surface: var(--surface);
-  --color-surface-light: var(--surface-light);
-  --color-surface-lighter: var(--surface-lighter);
-
-  /* Theme-aware text colors */
-  --color-t-primary: var(--t-primary);
-  --color-t-secondary: var(--t-secondary);
-  --color-t-muted: var(--t-muted);
-  --color-t-faint: var(--t-faint);
-
-  /* Theme-aware border */
-  --color-b-default: var(--b-default);
-  --color-b-light: var(--b-light);
-
-  /* Theme-aware card (no custom book color) */
+  --color-paper: var(--paper);
   --color-card: var(--card);
-
-  /* Backdrop */
+  --color-sunk: var(--sunk);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-text: var(--brand-text);
+  --color-brass: var(--brass);
   --color-backdrop: var(--backdrop);
+
+  --color-moss: var(--moss);
+  --color-sky: var(--sky);
+  --color-plum: var(--plum);
+  --color-rust: var(--rust);
+  --color-stone: var(--stone);
 }
 
-/* ===== Dark theme (default) ===== */
-:root {
-  --surface: #0f172a;
-  --surface-light: #1e293b;
-  --surface-lighter: #334155;
-  --t-primary: #f1f5f9;
-  --t-secondary: #cbd5e1;
-  --t-muted: #94a3b8;
-  --t-faint: #64748b;
-  --b-default: rgba(51,65,85,0.5);
-  --b-light: rgba(51,65,85,0.3);
-  --card: #1e293b;
-  --backdrop: rgba(0,0,0,0.7);
-  color-scheme: dark;
-}
-
-/* ===== Light theme ===== */
-:root.light {
-  --surface: #f1f5f9;
-  --surface-light: #ffffff;
-  --surface-lighter: #e2e8f0;
-  --t-primary: #0f172a;
-  --t-secondary: #334155;
-  --t-muted: #64748b;
-  --t-faint: #94a3b8;
-  --b-default: rgba(203,213,225,0.7);
-  --b-light: rgba(203,213,225,0.4);
-  --card: #ffffff;
-  --backdrop: rgba(0,0,0,0.4);
-  color-scheme: light;
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface-lighter) transparent;
-}
-
-::selection {
-  background-color: #3b82f6;
-  color: white;
-}
-
-/* ===== Mobile / PWA ===== */
 html {
-  /* Prevent pull-to-refresh on Android PWA */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overscroll-behavior-y: contain;
 }
 
 body {
-  /* iOS safe areas for notch & home indicator */
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-  /* Smoother tapping on mobile */
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Prevent text size adjust on orientation change */
-html {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+::selection { background: var(--brand); color: #fff; }
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
-/* Better touch targets */
-@media (pointer: coarse) {
-  button, a, select, input[type="checkbox"] {
-    min-height: 44px;
-    min-width: 44px;
-  }
+/* ---------- Gradniki (v sloju components, da jih Tailwind utilities lahko prepišejo) ---------- */
+@layer components {
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.panel-shadow { box-shadow: var(--shadow); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.05s;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+.btn-ghost { background: transparent; color: var(--ink-2); border-color: var(--line); }
+.btn-ghost:hover:not(:disabled) { background: var(--sunk); }
+.btn-danger { background: transparent; color: var(--rust); border-color: color-mix(in srgb, var(--rust) 40%, transparent); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--rust) 12%, transparent); }
+.btn-danger-solid { background: var(--rust); color: #fff; }
+.btn-danger-solid:hover:not(:disabled) { filter: brightness(0.92); }
+.btn-icon { min-height: 36px; min-width: 36px; padding: 0.4rem; border-radius: 9px; color: var(--muted); background: transparent; }
+.btn-icon:hover:not(:disabled) { background: var(--sunk); color: var(--ink); }
+
+.input {
+  width: 100%;
+  min-height: 42px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  font-size: 1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder { color: var(--faint); }
+.input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); }
+textarea.input { resize: vertical; line-height: 1.5; }
+select.input { cursor: pointer; }
+
+.label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+.alert {
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  border: 1px solid;
+}
+.alert-error { color: var(--rust); background: color-mix(in srgb, var(--rust) 10%, transparent); border-color: color-mix(in srgb, var(--rust) 35%, transparent); }
+.alert-info { color: var(--ink-2); background: color-mix(in srgb, var(--brass) 14%, transparent); border-color: color-mix(in srgb, var(--brass) 40%, transparent); }
+.alert-ok { color: var(--moss); background: color-mix(in srgb, var(--moss) 12%, transparent); border-color: color-mix(in srgb, var(--moss) 35%, transparent); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--stone)) 40%, transparent);
+  color: var(--tone, var(--stone));
+  background: color-mix(in srgb, var(--tone, var(--stone)) 12%, transparent);
+}
+.tone-plum { --tone: var(--plum); }
+.tone-sky { --tone: var(--sky); }
+.tone-moss { --tone: var(--moss); }
+.tone-brass { --tone: var(--brass); }
+.tone-rust { --tone: var(--rust); }
+.tone-stone { --tone: var(--stone); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
+  transition: all 0.15s;
+}
+.chip:hover { color: var(--ink); border-color: var(--faint); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.chip .count { opacity: 0.6; font-weight: 500; }
+
+.heading { font-family: var(--font-serif); letter-spacing: -0.01em; }
+
+/* Polica: dekorativna črta pod naslovom */
+.shelf-rule {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(var(--sunk), var(--line));
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--line) 60%, transparent);
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ---------- Knjiga ---------- */
+.book-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, border-color 0.2s;
+}
+.book-card:hover { transform: translateY(-2px); border-color: var(--faint); }
+.book-spine { position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--spine, var(--stone)); }
+.cover {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px 8px 8px 4px;
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.45), inset 3px 0 0 rgba(255, 255, 255, 0.18), inset -1px 0 0 rgba(0, 0, 0, 0.15);
+}
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.scroll-x { overflow-x: auto; scrollbar-width: none; }
+.scroll-x::-webkit-scrollbar { display: none; }
+
+/* Spodnja navigacija na telefonu */
+.bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-  50% { box-shadow: 0 0 20px 4px rgba(59, 130, 246, 0.3); }
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px) scale(0.99); } to { opacity: 1; transform: none; } }
+.animate-fade-in { animation: fadeIn 0.28s ease-out both; }
+.animate-slide-up { animation: slideUp 0.28s ease-out both; }
 
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.5s ease-out forwards;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
