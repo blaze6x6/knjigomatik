@@ -1,39 +1,40 @@
 services:
   db:
     image: postgres:16-alpine
-    restart: unless-stopped
-    container_name: knjigomatik-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: knjigomatik
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata-dev:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d knjigomatik"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: knjigomatik
-    restart: unless-stopped
+    build: .
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/knjigomatik
-      JWT_SECRET: spremenite-ta-skrivni-kljuc-v-produkciji-2024
-#      GEMINI_API_KEY: ********
-      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:-lokalni-razvojni-kljuc-ki-ni-za-produkcijo-0123456789}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      COOKIE_SECURE: "false"
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
-  pgdata:
+  pgdata-dev:
