@@ -5,29 +5,38 @@ services:
     container_name: knjigomatik-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: knjigomatik
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
+    # Baza je dosegljiva samo aplikaciji znotraj omrežja compose.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d knjigomatik"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   app:
-    image: blaze666/knjigomatik:latest
+    image: blaze666/knjigomatik:${KNJIGOMATIK_VERSION:-latest}
     container_name: knjigomatik
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/knjigomatik
-      JWT_SECRET: spremenite-ta-skrivni-kljuc-v-produkciji-2024
-#      GEMINI_API_KEY: ********
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/knjigomatik
+      JWT_SECRET: ${JWT_SECRET:?Nastavite JWT_SECRET v datoteki .env (openssl rand -hex 32)}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+      APP_URL: ${APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      APP_TZ: ${APP_TZ:-Europe/Ljubljana}
       NODE_ENV: production
     depends_on:
       db:
