@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import PwaRegister from "@/components/PwaRegister";
 import ThemeProvider from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/Toast";
 import { DEFAULT_DARK, DEFAULT_LIGHT, THEMES, THEME_STORAGE_KEY } from "@/lib/themes";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>
+        <PwaRegister />
       </body>
     </html>
   );

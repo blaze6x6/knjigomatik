@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4ede1">
+<title>Knjigomatik · brez povezave</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f4ede1; --ink:#2b2420; --muted:#6f6258; --brand:#8c2f39; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1b1715; --ink:#efe6da; --muted:#a79a8d; --brand:#d77a84; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+         background:var(--bg); color:var(--ink); font-family: Georgia, "Iowan Old Style", serif; text-align:center; }
+  main { max-width:360px; }
+  img { width:72px; height:72px; border-radius:16px; }
+  h1 { font-size:1.5rem; margin:20px 0 8px; }
+  p { color:var(--muted); line-height:1.5; margin:0 0 24px; font-family: system-ui, sans-serif; }
+  button { font:inherit; font-family: system-ui, sans-serif; background:var(--brand); color:#fff; border:0; border-radius:12px; padding:12px 22px; cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icon-192.png" alt="">
+  <h1>Ni povezave</h1>
+  <p>Knjigomatik potrebuje internet, da prikaže vašo zbirko. Preverite povezavo in poskusite znova.</p>
+  <button onclick="location.reload()">Poskusi znova</button>
+</main>
+<script>addEventListener("online", function(){ location.reload(); });</script>
+</body>
+</html>

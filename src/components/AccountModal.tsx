@@ -4,6 +4,7 @@ import { useState } from "react";
 import { apiJson } from "@/lib/api";
 import type { SessionUserInfo } from "@/lib/types";
 import Modal from "./Modal";
+import InstallApp from "./InstallApp";
 import PasswordField from "./PasswordField";
 import { useToast } from "./Toast";
 
@@ -102,6 +103,8 @@ export default function AccountModal({ user, emailEnabled, onClose, onUserChange
           <PasswordField id="new2" label="Ponovite novo geslo" value={pw2} onChange={setPw2} autoComplete="new-password" />
           <button className="btn btn-primary" disabled={pwBusy}>{pwBusy ? "Shranjujem …" : "Spremeni geslo"}</button>
         </form>
+
+        <InstallApp />
       </div>
     </Modal>
   );

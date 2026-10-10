@@ -1,4 +1,4 @@
-# 📚 Knjigomatik
+# 📚 Knjigomatik 2.1
 
 Osebna knjižna polica za vas in vašo družino ali bralni krožek. Kaj berete, kaj ste prebrali, kaj čaka na polici ali v knjižnici, z ocenami, povzetki in statistiko. Vmesnik je v slovenščini, deluje na telefonu (PWA) in v namizni različici, podatki ostanejo na vašem strežniku.
 

@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
+      // Servisni delavec se ne sme predpomniti, sicer se posodobitve ne bi nikoli prenesle.
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+      { source: "/manifest.json", headers: [{ key: "Content-Type", value: "application/manifest+json" }] },
     ];
   },
 };

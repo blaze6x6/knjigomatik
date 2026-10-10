@@ -1,5 +1,12 @@
 # Spremembe
 
+## 2.3.0
+
+- Aplikacijo je mogoče **namestiti kot PWA** (Android/Chrome: »Namesti« v Mojem računu ali v meniju brskalnika; iOS Safari: Deli → Dodaj na začetni zaslon).
+- Servisni delavec `public/sw.js`: hitrejše nalaganje statičnih datotek, brez povezave se prikaže `offline.html`. API-jev in strani ne shranjuje v predpomnilnik (podatki so zasebni).
+- Manifest z `id`, `scope`, ločenima namenoma ikon `any` in `maskable`. Nova komponenta `InstallApp`, registracija v `PwaRegister`.
+- Namestitev zahteva **HTTPS** (ali `localhost`). Registracija servisnega delavca teče samo v produkcijski gradnji.
+
 ## 2.2.0
 
 - 20 barvnih tem (10 svetlih, 10 temnih), izbirnik z ikono palete v glavi (tudi na prijavni strani) in možnost »Samodejno« (sledi svetli/temni nastavitvi naprave). Izbira se pomni v brskalniku.
